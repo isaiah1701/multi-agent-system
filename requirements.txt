@@ -1,0 +1,7 @@
+# Local embedding and vector-storage dependencies for the ingestion pipeline.
+anthropic>=0.40,<1.0
+chromadb>=1.0,<2.0
+langgraph>=0.2,<2.0
+PyYAML>=6.0,<7.0
+rank-bm25>=0.2,<1.0
+sentence-transformers>=3.0,<6.0
