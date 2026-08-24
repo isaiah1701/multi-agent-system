@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 from collections.abc import Mapping
@@ -11,6 +12,9 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from observability import observe
+from resilience.retry import DEFAULT_BACKOFF_SECONDS, retry_sync
 
 
 API_BASE = "https://api.github.com"
@@ -20,6 +24,7 @@ MAX_LIMIT = 20
 MAX_RELEASE_BODY_CHARS = 2000
 SUPPORTED_RESOURCE_TYPES = frozenset({"latest_release", "releases", "issues", "pull_requests", "tags", "changelog"})
 RELEASE_TAG_PATTERN = re.compile(r"^v?(\d+)\.(\d+)(?:\.\d+)?$")
+LOGGER = logging.getLogger(__name__)
 
 
 def _failure(resource_type: str, code: str, message: str) -> dict[str, Any]:
@@ -38,6 +43,29 @@ def _headers() -> dict[str, str]:
     return headers
 
 
+def _is_retryable_request_error(error: Exception) -> bool:
+    """Retry only transient GitHub failures; malformed or invalid requests fail fast."""
+    if isinstance(error, HTTPError):
+        remaining = error.headers.get("X-RateLimit-Remaining") if error.headers else None
+        return (
+            error.code in {408, 425, 429}
+            or 500 <= error.code <= 599
+            or (error.code == 403 and remaining == "0")
+        )
+    return isinstance(error, (URLError, TimeoutError, OSError))
+
+
+def _log_retry(error: Exception, retry_number: int, delay: float) -> None:
+    # The tool returns a structured error after its final failed attempt.
+    LOGGER.warning(
+        "GitHub request failed (%s); retry %d/%d in %s seconds",
+        error,
+        retry_number,
+        len(DEFAULT_BACKOFF_SECONDS),
+        delay,
+    )
+
+
 def _get_json(endpoint: str, params: Mapping[str, str | int] | None = None) -> tuple[Any | None, dict[str, Any] | None]:
     """Request an internally constructed GitHub endpoint and decode one JSON document."""
     url = f"{API_BASE}{endpoint}"
@@ -45,7 +73,12 @@ def _get_json(endpoint: str, params: Mapping[str, str | int] | None = None) -> t
         url = f"{url}?{urlencode(params)}"
     request = Request(url, headers=_headers(), method="GET")
     try:
-        with urlopen(request, timeout=DEFAULT_TIMEOUT_SECONDS) as response:  # nosec B310 - endpoint is fixed above
+        response = retry_sync(
+            lambda: urlopen(request, timeout=DEFAULT_TIMEOUT_SECONDS),  # nosec B310 - endpoint is fixed above
+            should_retry=_is_retryable_request_error,
+            on_retry=_log_retry,
+        )
+        with response:
             payload = response.read().decode("utf-8")
     except HTTPError as error:
         remaining = error.headers.get("X-RateLimit-Remaining") if error.headers else None
@@ -133,6 +166,7 @@ def _items(payload: Any) -> list[Mapping[str, Any]] | None:
     return list(payload)
 
 
+@observe(name="github-kubernetes-lookup", as_type="tool")
 def github_kubernetes_lookup(
     resource_type: str, query: str | None = None, limit: int = 5
 ) -> dict[str, Any]:

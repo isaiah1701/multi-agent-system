@@ -9,8 +9,10 @@ from collections.abc import Mapping
 from typing import Any, TYPE_CHECKING
 
 from agents.sub_agents.answer import CONTEXT_SYSTEM_PROMPT, GENERAL_CONTEXT_SYSTEM_PROMPT, format_tool_results
+from agents.conversation import prompt_with_history, recent_conversation
 from llm.client import LLMClientError, create_message, generate_text
 from llm.config import CONTEXT_MAX_TOKENS, CONTEXT_MODEL
+from observability import observe
 from tools import PLATFORM_REFERENCE_SEARCH_TOOL, TOOL_FUNCTIONS, TOOL_SCHEMAS
 
 
@@ -96,10 +98,14 @@ def _server_search_evidence(content: list[Any]) -> dict[str, Any] | None:
     return {"ok": True, "summary": text, "sources": sources}
 
 
+@observe(name="tool-selection", as_type="agent", capture_input=False, capture_output=False)
 async def use_tools(state: "AgentState") -> dict[str, list[dict[str, Any]]]:
     """Let Claude select and execute only registered tools for at most three rounds."""
     question = _question_from(state)
-    messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
+    history = recent_conversation(state)
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": prompt_with_history(history, f"Current question:\n{question}")}
+    ]
     tool_results: list[dict[str, Any]] = []
 
     for round_number in range(1, MAX_TOOL_ROUNDS + 1):
@@ -176,9 +182,11 @@ async def use_tools(state: "AgentState") -> dict[str, list[dict[str, Any]]]:
     return {"tool_results": tool_results}
 
 
+@observe(name="evidence-briefing", as_type="chain", capture_input=False, capture_output=False)
 async def add_context(state: "AgentState") -> dict[str, str]:
     """Use the low-cost model to create a grounded briefing from tool evidence."""
     question = _question_from(state)
+    history = recent_conversation(state)
     tool_results = state.get("tool_results", [])
     successful_results = [
         result
@@ -189,11 +197,13 @@ async def add_context(state: "AgentState") -> dict[str, str]:
     ]
     if not successful_results:
         LOGGER.info("No usable tool evidence; generating a general guidance briefing")
-        prompt = f"Question:\n{question}\n\nNo tool evidence was returned."
+        prompt = prompt_with_history(history, f"Question:\n{question}\n\nNo tool evidence was returned.")
         system = GENERAL_CONTEXT_SYSTEM_PROMPT
     else:
         LOGGER.info("Context generation started for %d tool result(s)", len(successful_results))
-        prompt = f"Question:\n{question}\n\nTool evidence:\n{format_tool_results(successful_results)}"
+        prompt = prompt_with_history(
+            history, f"Question:\n{question}\n\nTool evidence:\n{format_tool_results(successful_results)}"
+        )
         system = CONTEXT_SYSTEM_PROMPT
 
     try:

@@ -5,6 +5,8 @@ from __future__ import annotations
 from numbers import Real
 from typing import Any
 
+from observability import observe
+
 
 SUPPORTED_OPERATIONS = frozenset(
     {
@@ -35,6 +37,7 @@ def _percentage(numerator: float, denominator: float, *, denominator_name: str) 
     return round((numerator / denominator) * 100, 4)
 
 
+@observe(name="kubernetes-calculator", as_type="tool")
 def calculate(operation: str, values: dict[str, Any]) -> dict[str, Any]:
     """Perform an explicitly defined calculation without evaluating model-provided code."""
     if operation not in SUPPORTED_OPERATIONS:

@@ -1,0 +1,10 @@
+{
+  "attempted": 5,
+  "count": 5,
+  "failed": 0,
+  "failure_reasons": {},
+  "failure_stages": {},
+  "avg_faithfulness": 0.62,
+  "avg_relevance": 0.83,
+  "avg_correctness": 0.5
+}

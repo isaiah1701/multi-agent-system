@@ -27,6 +27,10 @@ class OrchestratorTests(unittest.TestCase):
             patch.dict("agents.sub_agents.retrieve.TOOL_FUNCTIONS", tool_functions, clear=False),
             patch("agents.sub_agents.retrieve.generate_text", return_value="evidence briefing"),
             patch("agents.sub_agents.answer.generate_text", return_value="grounded answer"),
+            patch(
+                "agents.sub_agents.answer.create_message",
+                return_value={"content": [{"text": '{"allow": true}'}]},
+            ),
         ):
             result = asyncio.run(build_app().ainvoke({"question": "Explain this Kubernetes question."}))
         return result, select_tools
@@ -124,6 +128,10 @@ class OrchestratorTests(unittest.TestCase):
             patch("agents.sub_agents.retrieve.create_message", return_value=server_search) as select_tools,
             patch("agents.sub_agents.retrieve.generate_text", return_value="evidence briefing"),
             patch("agents.sub_agents.answer.generate_text", return_value="grounded recommendation"),
+            patch(
+                "agents.sub_agents.answer.create_message",
+                return_value={"content": [{"text": '{"allow": true}'}]},
+            ),
         ):
             result = asyncio.run(build_app().ainvoke({"question": "Should I use ECS or EKS?"}))
         output = result["tool_results"][0]["output"]

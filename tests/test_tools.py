@@ -114,17 +114,19 @@ class GithubToolTests(unittest.TestCase):
         headers = Message()
         headers["X-RateLimit-Remaining"] = "0"
         error = HTTPError("https://api.github.com", 403, "Forbidden", headers, None)
-        with patch("tools.github.urlopen", side_effect=error):
+        with patch("resilience.retry.time.sleep"), patch("tools.github.urlopen", side_effect=error) as request:
             result = github_kubernetes_lookup("tags")
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "rate_limited")
+        self.assertEqual(request.call_count, 5)
 
     def test_http_failure_returns_structured_failure(self) -> None:
         error = HTTPError("https://api.github.com", 500, "Server Error", Message(), None)
-        with patch("tools.github.urlopen", side_effect=error):
+        with patch("resilience.retry.time.sleep"), patch("tools.github.urlopen", side_effect=error) as request:
             result = github_kubernetes_lookup("tags")
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "http_error")
+        self.assertEqual(request.call_count, 5)
 
 
 class CalculatorToolTests(unittest.TestCase):

@@ -6,6 +6,7 @@ from typing import Any
 
 from retrieval import retrieve
 from retrieval.retrieve import RetrievalCandidate
+from observability import observe
 
 
 def _serialize_candidate(candidate: RetrievalCandidate) -> dict[str, Any]:
@@ -19,6 +20,7 @@ def _serialize_candidate(candidate: RetrievalCandidate) -> dict[str, Any]:
     }
 
 
+@observe(name="kubernetes-document-search", as_type="tool")
 def search_kubernetes_docs(query: str, k: int = 10) -> dict[str, Any]:
     """Search the persisted Kubernetes corpus through its public hybrid retrieval API."""
     if not isinstance(query, str) or not query.strip():
