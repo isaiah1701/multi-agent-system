@@ -50,7 +50,11 @@ config:
   AGENT_SERVICE_TIMEOUT_SECONDS: "120"
 
 persistence:
-  storageClass: ""
+  # EKS does not supply a CSI-backed default class. The production bootstrap
+  # installs this encrypted gp3 class for Chroma and model-cache volumes.
+  storageClass: gp3
+  storageClassConfig:
+    enabled: true
   chroma:
     size: 20Gi
   modelCache:
