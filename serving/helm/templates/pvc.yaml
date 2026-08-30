@@ -6,6 +6,10 @@ metadata:
   name: {{ include "kubemind.fullname" . }}-chroma
   labels:
     {{- include "kubemind.labels" . | nindent 4 }}
+  annotations:
+    # Dynamic EBS binding waits for a scheduled Pod, so keep the claims in
+    # the same Argo CD wave as their consumer Deployments.
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   accessModes: ["ReadWriteOnce"]
   {{- if $storageClass }}
@@ -21,6 +25,8 @@ metadata:
   name: {{ include "kubemind.fullname" . }}-model-cache
   labels:
     {{- include "kubemind.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   accessModes: ["ReadWriteOnce"]
   {{- if $storageClass }}
