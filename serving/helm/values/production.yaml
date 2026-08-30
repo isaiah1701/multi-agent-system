@@ -1,0 +1,15 @@
+# Rendered and committed by .github/workflows/manfests-scan-push.yml.
+# This file deliberately contains image locations and immutable tags only.
+images:
+  api:
+    repository: 338235305910.dkr.ecr.eu-west-2.amazonaws.com/kubemind-api
+    tag: sha-625e1ba55a91c76bbd97db228d3e0fd686992291
+  orchestrator:
+    repository: 338235305910.dkr.ecr.eu-west-2.amazonaws.com/kubemind-orchestrator
+    tag: sha-625e1ba55a91c76bbd97db228d3e0fd686992291
+  retriever:
+    repository: 338235305910.dkr.ecr.eu-west-2.amazonaws.com/kubemind-retriever
+    tag: sha-625e1ba55a91c76bbd97db228d3e0fd686992291
+  answer:
+    repository: 338235305910.dkr.ecr.eu-west-2.amazonaws.com/kubemind-answer
+    tag: sha-625e1ba55a91c76bbd97db228d3e0fd686992291
