@@ -36,21 +36,7 @@ The managed Kubernetes components are limited to four:
 
 `serving/helm` contains the whole Helm configuration: `templates/` contains the agent, ESO, and Argo CD application templates, while `values/` contains the bootstrap, base, and production values. `helmfile sync` installs ESO and Argo CD first, then renders that same chart in bootstrap mode to create the two Argo CD `Application` resources. Before applying, replace `https://github.com/ORG/REPOSITORY.git` in `helmfile.yaml` with the HTTPS clone URL that Argo CD can read. For a private repository, also configure Argo CD repository credentials before the applications are reconciled.
 
-The agent chart deliberately needs `values/production.yaml`; the manifest promotion workflow generates and commits it only after the corresponding images pass Trivy. It contains ECR repository addresses and immutable `sha-<commit>` tags only—no credentials. Create the Langfuse Secret outside Git before syncing the charts:
-
-```bash
-kubectl create namespace langfuse --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n langfuse create secret generic langfuse-runtime \
-  --from-literal=salt="$(openssl rand -base64 32)" \
-  --from-literal=encryption-key="$(openssl rand -hex 32)" \
-  --from-literal=nextauth-secret="$(openssl rand -base64 32)" \
-  --from-literal=postgresql-password="$(openssl rand -base64 32)" \
-  --from-literal=clickhouse-password="$(openssl rand -base64 32)" \
-  --from-literal=redis-password="$(openssl rand -base64 32)" \
-  --from-literal=s3-user=langfuse \
-  --from-literal=s3-password="$(openssl rand -base64 32)"
-
-```
+The agent chart deliberately needs `values/production.yaml`; the manifest promotion workflow generates and commits it only after the corresponding images pass Trivy. It contains ECR repository addresses and immutable `sha-<commit>` tags only—no credentials. `scripts/apply-k8s.sh` creates `kubemind/prod/langfuse-runtime` in AWS Secrets Manager if it is absent, with URL-safe generated values. ESO is the only component that materializes that secret in the `langfuse` namespace.
 
 Bootstrap Terraform creates and writes the `kubemind/prod/runtime` AWS Secrets Manager secret. Copy [`serving/terraform/bootstrap/terraform.tfvars.example`](../serving/terraform/bootstrap/terraform.tfvars.example) to the ignored `serving/terraform/bootstrap/terraform.tfvars`, then set `kubemind_runtime_secret` with exactly these three properties: `ANTHROPIC_API_KEY`, `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY`. Increment `kubemind_runtime_secret_version` when rotating a value. The secret value is sent through Terraform's write-only argument and is not stored in Terraform state; the ignored tfvars file must still be protected. If tracing is disabled, the two Langfuse properties may be empty strings.
 

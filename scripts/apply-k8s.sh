@@ -8,6 +8,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 bootstrap_dir="$repo_root/serving/terraform/bootstrap"
 production_dir="$repo_root/serving/terraform/environments/prod"
 runtime_input="$bootstrap_dir/runtime-secret.auto.tfvars"
+langfuse_runtime_secret_name="${LANGFUSE_RUNTIME_SECRET_NAME:-kubemind/prod/langfuse-runtime}"
 
 fail() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -16,6 +17,41 @@ fail() {
 
 require_file() {
   test -f "$1" || fail "Required file is missing: $1"
+}
+
+ensure_langfuse_runtime_secret() {
+  if aws secretsmanager describe-secret --secret-id "$langfuse_runtime_secret_name" --region "$AWS_REGION" >/dev/null 2>&1; then
+    printf 'Using existing Langfuse runtime secret %s.\n' "$langfuse_runtime_secret_name"
+    return
+  fi
+
+  command -v jq >/dev/null 2>&1 || fail "jq is required to generate the Langfuse runtime secret."
+  command -v openssl >/dev/null 2>&1 || fail "openssl is required to generate the Langfuse runtime secret."
+
+  # Hex credentials are URL-safe for Langfuse's PostgreSQL and ClickHouse
+  # connection strings. The JSON is sent directly to Secrets Manager and is
+  # never written to disk or printed.
+  local secret_payload
+  secret_payload=$(jq -n \
+    --arg salt "$(openssl rand -hex 32)" \
+    --arg encryption_key "$(openssl rand -hex 32)" \
+    --arg nextauth_secret "$(openssl rand -hex 32)" \
+    --arg postgresql_password "$(openssl rand -hex 32)" \
+    --arg clickhouse_password "$(openssl rand -hex 32)" \
+    --arg redis_password "$(openssl rand -hex 32)" \
+    --arg s3_user "langfuse" \
+    --arg s3_password "$(openssl rand -hex 32)" \
+    '{salt:$salt, "encryption-key":$encryption_key, "nextauth-secret":$nextauth_secret, "postgresql-password":$postgresql_password, "clickhouse-password":$clickhouse_password, "redis-password":$redis_password, "s3-user":$s3_user, "s3-password":$s3_password}')
+
+  aws secretsmanager create-secret \
+    --name "$langfuse_runtime_secret_name" \
+    --description "KubeMind Langfuse runtime dependencies" \
+    --secret-string "$secret_payload" \
+    --region "$AWS_REGION" \
+    --query 'Name' \
+    --output text >/dev/null
+  unset secret_payload
+  printf 'Created Langfuse runtime secret %s.\n' "$langfuse_runtime_secret_name"
 }
 
 : "${AWS_PROFILE:?Export AWS_PROFILE for the target AWS account before running this script.}"
@@ -44,6 +80,8 @@ fi
 if rg -q 'https://github.com/ORG/REPOSITORY.git' "$repo_root/helmfile.yaml"; then
   fail "Replace the placeholder Git repository URL in helmfile.yaml before applying."
 fi
+
+ensure_langfuse_runtime_secret
 
 printf 'Applying bootstrap Terraform in AWS account %s...\n' "$actual_account_id"
 terraform -chdir="$bootstrap_dir" init -input=false

@@ -92,7 +92,10 @@ data "aws_iam_policy_document" "external_secrets_runtime" {
       "secretsmanager:GetSecretValue",
     ]
 
-    resources = [data.aws_secretsmanager_secret.kubemind_runtime.arn]
+    resources = [
+      data.aws_secretsmanager_secret.kubemind_runtime.arn,
+      "arn:${data.aws_partition.current.partition}:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:kubemind/prod/langfuse-runtime-*",
+    ]
   }
 }
 

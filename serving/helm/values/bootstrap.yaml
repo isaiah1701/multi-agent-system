@@ -7,6 +7,10 @@ agentServices:
   namespace: kubemind
   chartPath: serving/helm
 
+persistence:
+  storageClassConfig:
+    enabled: false
+
 git:
   repoURL: ""
   targetRevision: main
@@ -21,6 +25,17 @@ syncPolicy:
   automated: true
   selfHeal: true
   prune: true
+
+# This secret is generated directly in AWS Secrets Manager during bootstrap.
+# ESO is the only component that materializes it in the Langfuse namespace.
+langfuseRuntimeSecret:
+  name: langfuse-runtime
+  externalSecret:
+    refreshInterval: 1h
+    secretStoreName: kubemind-langfuse-aws-secrets-manager
+    aws:
+      region: eu-west-2
+      secretId: kubemind/prod/langfuse-runtime
 
 langfuse:
   name: langfuse
@@ -56,6 +71,12 @@ langfuse:
       auth:
         existingSecret: langfuse-runtime
         existingSecretKey: clickhouse-password
+      # A single lightweight replica fits the development EKS node group.
+      replicaCount: 1
+      resourcesPreset: small
+      zookeeper:
+        replicaCount: 1
+        resourcesPreset: nano
     redis:
       auth:
         existingSecret: langfuse-runtime

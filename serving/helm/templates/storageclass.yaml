@@ -8,6 +8,7 @@ metadata:
     {{- include "kubemind.labels" . | nindent 4 }}
   annotations:
     argocd.argoproj.io/sync-wave: "-3"
+    storageclass.kubernetes.io/is-default-class: "true"
 provisioner: ebs.csi.aws.com
 parameters:
   type: gp3
