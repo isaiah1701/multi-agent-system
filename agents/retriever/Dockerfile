@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # Retrieval/tool execution image. It alone contains Chroma and local ML code.
-FROM python:3.13-slim-bookworm AS builder
+FROM python:3.13-slim-trixie AS builder
 
 ARG PYTORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 
@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
         --extra-index-url https://pypi.org/simple \
         --requirement requirements.txt
 
-FROM python:3.13-slim-bookworm
+FROM python:3.13-slim-trixie
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -36,6 +36,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 RUN apt-get update \
+    && apt-get upgrade --yes \
     && apt-get install --yes --no-install-recommends ca-certificates libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 app \

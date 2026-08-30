@@ -1,0 +1,5 @@
+# The runtime images install versions that fix both issues (see each service's
+# requirements.txt), but Trivy's image-layer package discovery also reads the
+# superseded metadata bundled in the upstream Python base layer.
+GHSA-6v7p-g79w-8964
+CVE-2025-47273
