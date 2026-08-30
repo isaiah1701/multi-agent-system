@@ -84,7 +84,9 @@ jobs:
           retention-days: 30
       - name: Push the reviewed GitOps image references
         run: |
-          if git diff --quiet -- serving/helm/values/production.yaml; then
+          # `git diff` does not report an untracked first render, so use
+          # porcelain status to cover both an initial promotion and updates.
+          if test -z "$(git status --porcelain -- serving/helm/values/production.yaml)"; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
