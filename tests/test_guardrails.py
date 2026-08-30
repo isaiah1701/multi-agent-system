@@ -20,6 +20,7 @@ class RelevanceGuardrailTests(unittest.TestCase):
             "pdbs keep blocking my drain",
             "why's this thing crashlooping",
             "my svc ain't reachable",
+            "service vs headless service",
             "why's ingress throwing 502s",
             "pods keep getting nuked when node drains",
         )
@@ -93,6 +94,12 @@ class RelevanceGuardrailTests(unittest.TestCase):
         result = classify_kubernetes_relevance("Can you explain topology-aware routing?")
         self.assertTrue(result.allowed)
         self.assertIn("kubernetes_docs", result.matched_domains)
+
+    def test_corpus_phrase_matching_handles_singular_plural_variants(self) -> None:
+        result = classify_kubernetes_relevance("service vs headless service")
+        self.assertTrue(result.allowed)
+        self.assertIn("kubernetes_docs", result.matched_domains)
+        self.assertFalse(is_kubernetes_question("delivery service pricing"))
 
 
 if __name__ == "__main__":

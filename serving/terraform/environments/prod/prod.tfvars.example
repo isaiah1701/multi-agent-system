@@ -1,0 +1,11 @@
+# Copy this file outside version control or pass equivalent TF_VAR_* values in CI.
+aws_region           = "eu-west-2"
+vpc_cidr             = "10.40.0.0/16"
+availability_zones   = ["eu-west-2a", "eu-west-2b"]
+public_subnet_cidrs  = ["10.40.0.0/20", "10.40.16.0/20"]
+private_subnet_cidrs = ["10.40.128.0/20", "10.40.144.0/20"]
+github_repository    = "ORG/REPOSITORY"
+
+tags = {
+  Owner = "platform"
+}

@@ -1,0 +1,84 @@
+name: Terraform plan
+
+on:
+  pull_request:
+    paths:
+      - serving/terraform/**
+      - .github/workflows/terraform-plan.yml
+  push:
+    branches: [main]
+    paths:
+      - serving/terraform/**
+      - .github/workflows/terraform-plan.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-plan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-validation:
+    name: Terraform fmt, validate, TFLint, and Checkov
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.11.0"
+      - uses: terraform-linters/setup-tflint@6e87008f9dd1fe3e34e66aca6c97b4a69f72a7f4 # v4
+        with:
+          tflint_version: v0.55.1
+      - name: Enforce Terraform formatting
+        run: terraform fmt -check -recursive serving/terraform
+      - name: Initialize and validate production configuration without state access
+        working-directory: serving/terraform/environments/prod
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+      - name: Run TFLint
+        run: |
+          tflint --init
+          tflint --recursive --format compact
+      - name: Gate high and critical Terraform findings
+        uses: bridgecrewio/checkov-action@5659ddea96102e16d8f221b3d8402453c0b1c150 # v12
+        with:
+          directory: serving/terraform
+          framework: terraform
+          download_external_modules: true
+          soft_fail: false
+          quiet: true
+          hard_fail_on: HIGH,CRITICAL
+
+  plan:
+    name: Production Terraform plan
+    needs: static-validation
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_vpc_cidr: ${{ vars.TF_VPC_CIDR }}
+      TF_VAR_availability_zones: ${{ vars.TF_AVAILABILITY_ZONES_JSON }}
+      TF_VAR_public_subnet_cidrs: ${{ vars.TF_PUBLIC_SUBNET_CIDRS_JSON }}
+      TF_VAR_private_subnet_cidrs: ${{ vars.TF_PRIVATE_SUBNET_CIDRS_JSON }}
+      TF_VAR_github_repository: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.11.0"
+      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Create an unpersisted production plan
+        working-directory: serving/terraform/environments/prod
+        run: |
+          terraform init -backend=false -input=false
+          terraform plan -input=false -lock=false -no-color

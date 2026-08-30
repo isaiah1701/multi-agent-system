@@ -7,12 +7,10 @@ import json
 import unittest
 from unittest.mock import AsyncMock, patch
 
-# The application intentionally loads its hyphenated ``sub-agents`` directory
-# through the orchestrator's module loader.
-from agents.orchestrator import orchestrator as _orchestrator  # noqa: F401
-from agents.sub_agents.answer import (
+from agents.answer.agent import (
     ANSWER_DOCUMENT_CHUNK_LIMIT,
     BLOCKED_OUTPUT_MESSAGE,
+    INSUFFICIENT_EVIDENCE_MESSAGE,
     UNVERIFIED_OUTPUT_MESSAGE,
     answer,
     build_answer_system_prompt,
@@ -20,10 +18,20 @@ from agents.sub_agents.answer import (
     select_answer_budget,
 )
 from guardrails import inspect_output, parse_backup_judge_allow
-from llm.config import ANSWER_EXTENDED_MAX_TOKENS, ANSWER_MAX_TOKENS, ANSWER_TARGET_WORDS
+from agents.orchestrator.llm.config import ANSWER_EXTENDED_MAX_TOKENS, ANSWER_MAX_TOKENS, ANSWER_TARGET_WORDS
 
 
 class OutputGuardrailTests(unittest.TestCase):
+    source = {
+        "id": "1",
+        "type": "kubernetes_docs",
+        "title": "Pod Disruptions",
+        "source": "pod-disruptions.md",
+        "section": "PodDisruptionBudget",
+        "url": None,
+        "content": "A PDB limits voluntary disruptions.",
+    }
+
     def test_sensitive_output_is_blocked(self) -> None:
         result = inspect_output("Use ANTHROPIC_API_KEY=sk-ant-abcdefghijklmnopqrstuvwxyz", [])
 
@@ -50,23 +58,46 @@ class OutputGuardrailTests(unittest.TestCase):
 
         self.assertEqual(inspect_output("Your resource utilization is 85%.", tool_results).decision, "allow")
 
+    def test_structured_evidence_requires_valid_citation_ids(self) -> None:
+        self.assertEqual(
+            inspect_output("A PDB limits voluntary disruption. [1]", [], [self.source]).decision, "allow"
+        )
+        self.assertEqual(
+            inspect_output("A PDB limits voluntary disruption.", [], [self.source]).decision, "block"
+        )
+        self.assertEqual(
+            inspect_output("A PDB limits voluntary disruption. [9]", [], [self.source]).decision, "block"
+        )
+
     def test_backup_judge_parser_accepts_only_boolean_json(self) -> None:
         self.assertTrue(parse_backup_judge_allow({"content": [{"text": '```json\n{"allow": true}\n```'}]}))
         self.assertIsNone(parse_backup_judge_allow({"content": [{"text": "allow it"}]}))
 
     def test_answer_prompt_reserves_space_for_a_complete_conversational_reply(self) -> None:
-        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": []}
+        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": [], "sources": [self.source]}
         with patch(
-            "agents.sub_agents.answer.generate_text",
-            new=AsyncMock(return_value="A PDB limits voluntary disruption."),
+            "agents.answer.agent.generate_text",
+            new=AsyncMock(return_value="A PDB limits voluntary disruption. [1]"),
         ) as generate:
             asyncio.run(answer(state))
 
         self.assertEqual(generate.await_args.kwargs["max_tokens"], ANSWER_MAX_TOKENS)
         system = generate.await_args.kwargs["system"]
         self.assertIn(f"about {ANSWER_TARGET_WORDS} words", system)
-        self.assertIn("Always finish with a complete sentence", system)
+        self.assertIn("Finish every sentence", system)
         self.assertIn("Do not use Markdown headings", system)
+        self.assertIn("Structured evidence", str(generate.await_args.kwargs["prompt"]))
+
+    def test_answer_removes_an_insufficient_evidence_preamble_from_a_cited_answer(self) -> None:
+        mixed_answer = (
+            f"{INSUFFICIENT_EVIDENCE_MESSAGE} "
+            "A PDB limits voluntary disruption during maintenance. [1]"
+        )
+        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": [], "sources": [self.source]}
+        with patch("agents.answer.agent.generate_text", new=AsyncMock(return_value=mixed_answer)):
+            result = asyncio.run(answer(state))
+
+        self.assertEqual(result["answer"], "A PDB limits voluntary disruption during maintenance. [1]")
 
     def test_budget_guardrail_keeps_ordinary_questions_on_the_small_cap(self) -> None:
         budget = select_answer_budget("What is a PodDisruptionBudget?")
@@ -79,7 +110,7 @@ class OutputGuardrailTests(unittest.TestCase):
 
         self.assertTrue(budget.is_extended)
         self.assertEqual(budget.max_tokens, ANSWER_EXTENDED_MAX_TOKENS)
-        self.assertIn("explicitly needs more depth", build_answer_system_prompt(budget))
+        self.assertIn("explicitly requested detail", build_answer_system_prompt(budget))
 
     def test_answer_evidence_contains_only_three_documentation_chunks(self) -> None:
         first_chunks = [{"chunk_id": f"first-{index}"} for index in range(5)]
@@ -99,7 +130,7 @@ class OutputGuardrailTests(unittest.TestCase):
         self.assertEqual(len(second_chunks), 5)
 
     def test_guarded_stream_releases_only_checked_fragments_then_flushes_the_answer(self) -> None:
-        draft = ("A PDB limits voluntary disruptions while keeping maintenance safer. " * 5).strip()
+        draft = ("A PDB limits voluntary disruptions while keeping maintenance safer. [1] " * 5).strip()
         streamed: list[str] = []
         resets: list[str] = []
 
@@ -109,8 +140,8 @@ class OutputGuardrailTests(unittest.TestCase):
                 await on_text(draft[start : start + 40])  # type: ignore[misc]
             return draft
 
-        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": []}
-        with patch("agents.sub_agents.answer.generate_text", side_effect=generate_with_fragments):
+        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": [], "sources": [self.source]}
+        with patch("agents.answer.agent.generate_text", side_effect=generate_with_fragments):
             result = asyncio.run(
                 answer(
                     state,
@@ -136,8 +167,8 @@ class OutputGuardrailTests(unittest.TestCase):
             await kwargs["on_text"](draft)  # type: ignore[misc]
             return draft
 
-        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": []}
-        with patch("agents.sub_agents.answer.generate_text", side_effect=generate_blocked_fragment):
+        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": [], "sources": [self.source]}
+        with patch("agents.answer.agent.generate_text", side_effect=generate_blocked_fragment):
             result = asyncio.run(
                 answer(
                     state,
@@ -155,10 +186,10 @@ class OutputGuardrailTests(unittest.TestCase):
         self.assertEqual(resets, [BLOCKED_OUTPUT_MESSAGE])
 
     def test_hard_block_does_not_call_haiku_or_stream_draft(self) -> None:
-        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": []}
+        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": [], "sources": [self.source]}
         streamed: list[str] = []
-        with patch("agents.sub_agents.answer.generate_text", new=AsyncMock(return_value="Traceback (most recent call last):")), patch(
-            "agents.sub_agents.answer.create_message", new=AsyncMock()
+        with patch("agents.answer.agent.generate_text", new=AsyncMock(return_value="Traceback (most recent call last):")), patch(
+            "agents.answer.agent.create_message", new=AsyncMock()
         ) as judge:
             result = asyncio.run(answer(state, {"configurable": {"answer_stream_handler": streamed.append}}))
 
@@ -167,20 +198,15 @@ class OutputGuardrailTests(unittest.TestCase):
         judge.assert_not_awaited()
 
     def test_review_uses_haiku_backup_and_safe_fallback_on_rejection(self) -> None:
-        state = {
-            "question": "What is a PDB?",
-            "context": "Kubernetes docs say PDBs constrain voluntary disruptions.",
-            "tool_results": [{"tool_name": "search_kubernetes_docs", "output": {"chunks": [{"text": "PDB"}]}}],
-        }
-        with patch("agents.sub_agents.answer.generate_text", new=AsyncMock(return_value="A PDB constrains disruption.")), patch(
-            "agents.sub_agents.answer.create_message",
+        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": [], "sources": [self.source]}
+        with patch("agents.answer.agent.generate_text", new=AsyncMock(return_value="A PDB constrains disruption.")), patch(
+            "agents.answer.agent.create_message",
             new=AsyncMock(return_value={"content": [{"text": '{"allow": false}'}]}),
         ) as judge:
             result = asyncio.run(answer(state))
 
-        self.assertEqual(result["answer"], UNVERIFIED_OUTPUT_MESSAGE)
-        judge.assert_awaited_once()
-        self.assertEqual(judge.call_args.kwargs["temperature"], 0.0)
+        self.assertEqual(result["answer"], INSUFFICIENT_EVIDENCE_MESSAGE)
+        judge.assert_not_awaited()
 
 
 if __name__ == "__main__":

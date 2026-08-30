@@ -1,0 +1,49 @@
+repositories:
+  - name: argo
+    url: https://argoproj.github.io/argo-helm
+  - name: external-secrets
+    url: https://charts.external-secrets.io
+
+helmDefaults:
+  atomic: true
+  createNamespace: true
+  timeout: 600
+  wait: true
+
+releases:
+  # Helmfile installs cluster-level controllers first. Argo CD then reconciles
+  # the namespace-level Langfuse and KubeMind applications.
+  - name: external-secrets
+    namespace: external-secrets
+    chart: external-secrets/external-secrets
+    version: 2.10.0
+    labels:
+      app: external-secrets
+    values:
+      - installCRDs: true
+        serviceAccount:
+          create: true
+          # This exact service account is bound to the EKS Pod Identity
+          # association created by the production Terraform configuration.
+          name: external-secrets
+
+  - name: argocd
+    namespace: argocd
+    chart: argo/argo-cd
+    version: 10.4.2
+    labels:
+      app: argocd
+
+  - name: kubemind-bootstrap
+    namespace: argocd
+    chart: ./serving/helm
+    needs:
+      - external-secrets/external-secrets
+      - argocd/argocd
+    labels:
+      app: kubemind-bootstrap
+    values:
+      - ./serving/helm/values/bootstrap.yaml
+      - git:
+          repoURL: https://github.com/isaiah1701/multi-agent-system.git
+          targetRevision: main

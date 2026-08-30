@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from observability import observe, update_current_span
+from serving.app.langfuse import observe, update_current_span
 
 
 OutputDecision = Literal["allow", "block", "review"]
@@ -39,6 +39,8 @@ _ATTRIBUTION_PATTERN = re.compile(
 _EXTERNAL_EVIDENCE_TOOLS = frozenset(
     {"search_kubernetes_docs", "github_kubernetes_lookup", "platform_reference_lookup"}
 )
+_CITATION_PATTERN = re.compile(r"\[(\d+)\]")
+INSUFFICIENT_EVIDENCE_MESSAGE = "I don't have enough sourced evidence to answer that reliably."
 
 
 @dataclass(frozen=True)
@@ -50,8 +52,12 @@ class OutputGuardResult:
 
 
 @observe(name="output-guardrail", as_type="guardrail", capture_input=False, capture_output=False)
-def inspect_output(answer: str, tool_results: list[Mapping[str, object]] | object) -> OutputGuardResult:
-    """Block unsafe output locally and flag only ambiguous external-evidence use."""
+def inspect_output(
+    answer: str,
+    tool_results: list[Mapping[str, object]] | object,
+    sources: list[Mapping[str, object]] | object | None = None,
+) -> OutputGuardResult:
+    """Block unsafe output and deterministically validate supplied citation IDs."""
     normalized = answer.strip() if isinstance(answer, str) else ""
     if not normalized:
         return _result("block", "empty_answer")
@@ -64,12 +70,22 @@ def inspect_output(answer: str, tool_results: list[Mapping[str, object]] | objec
     if any(pattern.search(normalized) for pattern in _STACK_TRACE_PATTERNS):
         return _result("block", "internal_stack_trace")
 
+    citation_result = _citation_result(normalized, sources)
+    if citation_result is not None:
+        if citation_result.decision == "review":
+            return _result("block", *citation_result.reasons)
+        return _result(citation_result.decision, *citation_result.reasons)
+
     if _has_external_evidence(tool_results) and not _ATTRIBUTION_PATTERN.search(normalized):
         return _result("review", "external_evidence_without_attribution")
     return _result("allow")
 
 
-def inspect_stream_prefix(answer: str, tool_results: list[Mapping[str, object]] | object) -> OutputGuardResult:
+def inspect_stream_prefix(
+    answer: str,
+    tool_results: list[Mapping[str, object]] | object,
+    sources: list[Mapping[str, object]] | object | None = None,
+) -> OutputGuardResult:
     """Check an unfinalized answer prefix without emitting telemetry for every token.
 
     This applies the hard disclosure checks before a prefix is released to a
@@ -84,6 +100,9 @@ def inspect_stream_prefix(answer: str, tool_results: list[Mapping[str, object]] 
         return OutputGuardResult("block", tuple(sensitive_reasons))
     if any(pattern.search(normalized) for pattern in _STACK_TRACE_PATTERNS):
         return OutputGuardResult("block", ("internal_stack_trace",))
+    citation_result = _citation_result(normalized, sources)
+    if citation_result is not None:
+        return citation_result
     if _has_external_evidence(tool_results) and not _ATTRIBUTION_PATTERN.search(normalized):
         return OutputGuardResult("review", ("external_evidence_without_attribution",))
     return OutputGuardResult("allow")
@@ -136,6 +155,49 @@ def _has_external_evidence(tool_results: object) -> bool:
             continue
         return True
     return False
+
+
+def _citation_result(answer: str, sources: object) -> OutputGuardResult | None:
+    """Validate citations only when the caller supplied first-class evidence.
+
+    Keeping ``None`` distinct from an empty list preserves the legacy generic
+    attribution review for callers that have not yet adopted structured sources.
+    """
+    if sources is None:
+        return None
+    if answer == INSUFFICIENT_EVIDENCE_MESSAGE:
+        return OutputGuardResult("allow")
+    if not isinstance(sources, list) or not sources:
+        return OutputGuardResult("block", ("missing_evidence",))
+
+    valid_ids: set[str] = set()
+    for source in sources:
+        if not isinstance(source, Mapping):
+            return OutputGuardResult("block", ("missing_source_metadata",))
+        source_id = source.get("id")
+        source_type = source.get("type")
+        title = source.get("title")
+        provenance = source.get("source") or source.get("url")
+        if (
+            not isinstance(source_id, str)
+            or not source_id.isdecimal()
+            or not isinstance(source_type, str)
+            or not source_type.strip()
+            or not isinstance(title, str)
+            or not title.strip()
+            or not isinstance(provenance, str)
+            or not provenance.strip()
+        ):
+            return OutputGuardResult("block", ("missing_source_metadata",))
+        valid_ids.add(source_id)
+
+    cited_ids = set(_CITATION_PATTERN.findall(answer))
+    if not cited_ids:
+        return OutputGuardResult("review", ("missing_citation",))
+    unknown = cited_ids - valid_ids
+    if unknown:
+        return OutputGuardResult("block", ("invalid_citation",))
+    return OutputGuardResult("allow")
 
 
 def _result(decision: OutputDecision, *reasons: str) -> OutputGuardResult:

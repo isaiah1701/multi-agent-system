@@ -13,8 +13,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from observability import observe
-from resilience.retry import DEFAULT_BACKOFF_SECONDS, retry_sync
+from serving.app.langfuse import observe
+from agents.orchestrator.retry import DEFAULT_BACKOFF_SECONDS, retry_sync
 
 
 API_BASE = "https://api.github.com"

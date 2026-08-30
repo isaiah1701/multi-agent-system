@@ -6,7 +6,7 @@ from typing import Any
 
 from retrieval import retrieve
 from retrieval.retrieve import RetrievalCandidate
-from observability import observe
+from serving.app.langfuse import observe
 
 
 def _serialize_candidate(candidate: RetrievalCandidate) -> dict[str, Any]:

@@ -1,0 +1,147 @@
+name: Manfests scan and push
+
+on:
+  workflow_run:
+    workflows: ["Image deploy"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: SHA of already scanned ECR images to promote.
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: manfests-scan-push-main
+  cancel-in-progress: false
+
+jobs:
+  render-scan-and-push:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: ${{ vars.AWS_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-west-2' }}
+      - name: Render immutable production values
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+          IMAGE_SHA: ${{ inputs.image_sha || github.event.workflow_run.head_sha }}
+        run: |
+          export ECR_REGISTRY="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com"
+          envsubst < serving/helm/values/production.yaml.tpl > serving/helm/values/production.yaml
+      - uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+      - name: Build the Helm manifest artifact
+        run: |
+          helm lint serving/helm \
+            -f serving/helm/values/base.yaml \
+            -f serving/helm/values/production.yaml
+          helm template kubemind serving/helm \
+            --namespace kubemind \
+            -f serving/helm/values/base.yaml \
+            -f serving/helm/values/production.yaml \
+            > rendered-kubemind.yaml
+      - name: Validate Kubernetes schemas
+        run: |
+          docker run --rm -v "$PWD:/work" ghcr.io/yannh/kubeconform:v0.6.7 \
+            -strict -summary -ignore-missing-schemas /work/rendered-kubemind.yaml
+      - name: Gate required liveness and readiness probes
+        run: |
+          python -m pip install 'PyYAML>=6.0,<7.0'
+          python scripts/verify_kubernetes_probes.py rendered-kubemind.yaml
+      - name: Scan rendered manifests for high and critical misconfigurations
+        # v0.35.0. Pin the immutable commit, not a mutable action tag.
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          scan-type: config
+          scan-ref: rendered-kubemind.yaml
+          format: sarif
+          output: trivy-manifests.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Upload rendered manifest and scan reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: kubemind-manifests-${{ inputs.image_sha || github.event.workflow_run.head_sha }}
+          path: |
+            rendered-kubemind.yaml
+            trivy-manifests.sarif
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Push the reviewed GitOps image references
+        run: |
+          if git diff --quiet -- serving/helm/values/production.yaml; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add serving/helm/values/production.yaml
+          git commit -m "chore(gitops): promote scanned images"
+          git push origin HEAD:main
+
+  post-deploy-verify:
+    name: EKS rollout, liveness, readiness, and CIS gate
+    needs: render-scan-and-push
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: ${{ vars.AWS_CLUSTER_VALIDATION_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-west-2' }}
+      - uses: azure/setup-kubectl@c0c8b32d33a5244f1e5947304550403b63930415 # v4
+      - name: Connect to EKS
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+          EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'kubemind-prod' }}
+        run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${EKS_CLUSTER_NAME}"
+      - name: Gate rollout readiness and liveness endpoints
+        run: |
+          kubectl rollout status deployment/kubemind-api -n kubemind --timeout=5m
+          kubectl rollout status deployment/kubemind-orchestrator -n kubemind --timeout=5m
+          kubectl rollout status deployment/kubemind-retriever -n kubemind --timeout=5m
+          kubectl rollout status deployment/kubemind-answer -n kubemind --timeout=5m
+          kubectl port-forward -n kubemind service/kubemind-api 18000:80 >/tmp/kubemind-port-forward.log 2>&1 &
+          PORT_FORWARD_PID=$!
+          trap 'kill "${PORT_FORWARD_PID}" 2>/dev/null || true' EXIT
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --silent --show-error http://127.0.0.1:18000/health; then
+              exit 0
+            fi
+            sleep 3
+          done
+          cat /tmp/kubemind-port-forward.log
+          exit 1
+      - name: Run kube-bench node CIS checks
+        run: |
+          kubectl apply -f deploy/security/kube-bench-daemonset.yaml
+          sleep 30
+          kubectl logs -n kube-system -l app.kubernetes.io/name=kubemind-kube-bench --prefix > kube-bench.log
+          grep -E '(^\[FAIL\]|[[:space:]]FAIL[[:space:]])' kube-bench.log && exit 1 || true
+      - name: Upload kube-bench report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: kube-bench-${{ github.run_id }}
+          path: kube-bench.log
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Remove privileged scanner
+        if: always()
+        run: kubectl delete -f deploy/security/kube-bench-daemonset.yaml --ignore-not-found

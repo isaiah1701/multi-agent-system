@@ -101,8 +101,40 @@ def _corpus_phrases() -> frozenset[str]:
 
 
 def _corpus_matches(normalized: str) -> set[str]:
-    """Match only multiword corpus phrases, avoiding generic documentation tokens."""
-    return {phrase for phrase in _corpus_phrases() if len(phrase.split()) > 1 and _term_matches(normalized, phrase)}
+    """Match multiword docs phrases, tolerating ordinary singular/plural forms.
+
+    The corpus headings use terms such as ``Headless Services``. Operators
+    naturally ask for ``headless service``; an exact substring check rejected
+    that valid Kubernetes question. Matching is still limited to contiguous
+    multiword phrases, so generic words such as ``service`` do not become a
+    global allow-list entry.
+    """
+    return {
+        phrase
+        for phrase in _corpus_phrases()
+        if len(phrase.split()) > 1 and _phrase_matches(normalized, phrase)
+    }
+
+
+def _phrase_matches(query: str, phrase: str) -> bool:
+    query_words = query.split()
+    phrase_words = phrase.split()
+    if len(phrase_words) > len(query_words):
+        return False
+    for start in range(len(query_words) - len(phrase_words) + 1):
+        if all(_word_forms(left) & _word_forms(right) for left, right in zip(query_words[start:], phrase_words)):
+            return True
+    return False
+
+
+def _word_forms(word: str) -> set[str]:
+    """Keep the original spelling and add only a conservative plural form."""
+    forms = {word}
+    if len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        forms.add(word[:-1])
+    if len(word) > 4 and word.endswith("ies"):
+        forms.add(f"{word[:-3]}y")
+    return forms
 
 
 def classify_kubernetes_relevance(question: str) -> RelevanceResult:

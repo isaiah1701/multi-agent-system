@@ -6,7 +6,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from llm.client import create_message
+from agents.orchestrator.llm.client import create_message
 
 
 class ProviderError(Exception):
@@ -29,7 +29,7 @@ class LLMClientRetryTests(unittest.TestCase):
                 },
             }
         )
-        with patch("llm.client.get_async_client", return_value=client), patch("llm.client.update_current_generation") as telemetry:
+        with patch("agents.orchestrator.llm.client.get_async_client", return_value=client), patch("agents.orchestrator.llm.client.update_current_generation") as telemetry:
             asyncio.run(
                 create_message(
                     model="test-model",
@@ -56,7 +56,7 @@ class LLMClientRetryTests(unittest.TestCase):
         client = Mock()
         client.messages.create = AsyncMock(return_value="response")
 
-        with patch("llm.client.get_async_client", return_value=client):
+        with patch("agents.orchestrator.llm.client.get_async_client", return_value=client):
             asyncio.run(
                 create_message(
                     model="test-model",
@@ -74,7 +74,7 @@ class LLMClientRetryTests(unittest.TestCase):
         client.messages.create = AsyncMock(side_effect=[ProviderError(500), "response"])
         sleep = AsyncMock()
 
-        with patch("llm.client.get_async_client", return_value=client), patch("resilience.retry.asyncio.sleep", sleep):
+        with patch("agents.orchestrator.llm.client.get_async_client", return_value=client), patch("agents.orchestrator.retry.asyncio.sleep", sleep):
             result = asyncio.run(
                 create_message(
                     model="test-model",
@@ -93,7 +93,7 @@ class LLMClientRetryTests(unittest.TestCase):
         client.messages.create = AsyncMock(side_effect=ProviderError(400))
         sleep = AsyncMock()
 
-        with patch("llm.client.get_async_client", return_value=client), patch("resilience.retry.asyncio.sleep", sleep):
+        with patch("agents.orchestrator.llm.client.get_async_client", return_value=client), patch("agents.orchestrator.retry.asyncio.sleep", sleep):
             with self.assertRaisesRegex(Exception, "Anthropic request failed"):
                 asyncio.run(
                     create_message(

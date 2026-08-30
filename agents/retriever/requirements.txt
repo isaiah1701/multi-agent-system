@@ -1,0 +1,13 @@
+# Chroma, local embedding/reranking, tools, and evidence briefing.
+anthropic>=0.40,<1.0
+chromadb>=1.0,<2.0
+langfuse>=4.0,<5.0
+PyYAML>=6.0,<7.0
+rank-bm25>=0.2,<1.0
+# Pin the CPU-only PyTorch wheel.  The Dockerfile resolves this from the
+# PyTorch CPU index, preventing pip from selecting CUDA-enabled packages.
+torch==2.13.0+cpu
+sentence-transformers>=3.0,<6.0
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+python-dotenv>=1.0,<2.0

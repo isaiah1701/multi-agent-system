@@ -1,5 +1,15 @@
 .venv/
+.terraform/
 __pycache__/
 *.py[cod]
 data/chroma/
 .env
+deploy/kubernetes/kubemind-secrets.yaml
+serving/terraform/environments/*/*.tfvars
+serving/terraform/environments/*/*.tfplan
+serving/terraform/environments/*/backend.hcl
+serving/terraform/bootstrap/terraform.tfvars
+serving/terraform/bootstrap/runtime-secret.auto.tfvars
+serving/terraform/bootstrap/terraform.tfstate
+serving/terraform/bootstrap/terraform.tfstate.*
+serving/terraform/bootstrap/.terraform.tfstate.lock.info

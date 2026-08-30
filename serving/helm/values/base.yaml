@@ -1,0 +1,111 @@
+bootstrap:
+  enabled: false
+
+agentServices:
+  enabled: true
+
+runtimeSecret:
+  # ESO creates this Kubernetes Secret from the JSON secret in AWS Secrets
+  # Manager. Neither the values nor AWS credentials are stored in Git.
+  name: kubemind-runtime
+  externalSecret:
+    enabled: true
+    refreshInterval: 1h
+    secretStoreRef:
+      name: kubemind-aws-secrets-manager
+      kind: ClusterSecretStore
+    aws:
+      region: eu-west-2
+      secretId: kubemind/prod/runtime
+
+images:
+  api:
+    repository: ""
+    tag: ""
+  orchestrator:
+    repository: ""
+    tag: ""
+  retriever:
+    repository: ""
+    tag: ""
+  answer:
+    repository: ""
+    tag: ""
+
+config:
+  CONTEXT_MODEL: claude-haiku-4-5-20251001
+  ANSWER_MODEL: claude-sonnet-5
+  ANSWER_MAX_TOKENS: "200"
+  ANSWER_TARGET_WORDS: "150"
+  ANSWER_EXTENDED_MAX_TOKENS: "400"
+  ANSWER_EXTENDED_TARGET_WORDS: "2500"
+  OUTPUT_GUARD_JUDGE_MODEL: claude-haiku-4-5-20251001
+  OUTPUT_GUARD_JUDGE_MAX_TOKENS: "48"
+  PROMPT_CACHING_ENABLED: "true"
+  LANGFUSE_BASE_URL: http://langfuse-web.langfuse.svc.cluster.local:3000
+  LANGFUSE_TRACING_ENVIRONMENT: production
+  ORCHESTRATOR_SERVICE_URL: http://kubemind-orchestrator:8080
+  RETRIEVER_AGENT_URL: http://kubemind-retriever:8081
+  ANSWER_AGENT_URL: http://kubemind-answer:8082
+  AGENT_SERVICE_TIMEOUT_SECONDS: "120"
+
+persistence:
+  storageClass: ""
+  chroma:
+    size: 20Gi
+  modelCache:
+    size: 10Gi
+
+services:
+  api:
+    replicaCount: 2
+    port: 8000
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: "1"
+        memory: 256Mi
+  orchestrator:
+    replicaCount: 1
+    port: 8080
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 512Mi
+  retriever:
+    replicaCount: 1
+    port: 8081
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 3Gi
+  answer:
+    replicaCount: 2
+    port: 8082
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+probes:
+  readiness:
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3

@@ -1,0 +1,11 @@
+# Create this file from bootstrap rather than committing generated values:
+#
+#   cd ../../bootstrap
+#   terraform output -raw production_backend_hcl > ../environments/prod/backend.hcl
+#
+# Terraform 1.10+ is required for use_lockfile.
+bucket         = "REPLACE_WITH_BOOTSTRAP_OUTPUT"
+key            = "REPLACE_WITH_BOOTSTRAP_OUTPUT"
+region         = "REPLACE_WITH_BOOTSTRAP_OUTPUT"
+encrypt        = true
+use_lockfile   = true

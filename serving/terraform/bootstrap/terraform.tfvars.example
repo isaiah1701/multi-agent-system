@@ -1,0 +1,32 @@
+# Copy to terraform.tfvars (which is ignored) and replace the trusted principal
+# with the IAM user or role used by your local AWS CLI profile. That principal
+# also needs an identity policy allowing sts:AssumeRole on the created role.
+aws_region = "eu-west-2"
+
+project_name = "kubemind"
+environment  = "prod"
+cluster_name = "prod-cluster"
+
+# Copy this file to terraform.tfvars (ignored), replace all values, and never
+# commit it. Terraform writes this object to AWS Secrets Manager as JSON.
+kubemind_runtime_secret = {
+  ANTHROPIC_API_KEY   = "replace-me"
+  LANGFUSE_PUBLIC_KEY = "replace-me"
+  LANGFUSE_SECRET_KEY = "replace-me"
+}
+
+# Increase this when rotating any value above.
+kubemind_runtime_secret_version = 1
+
+terraform_trusted_principal_arns = [
+  "arn:aws:iam::123456789012:role/platform-operator"
+]
+
+# Add this only after token.actions.githubusercontent.com already exists as an
+# IAM OIDC provider in the account. The prod Terraform can create that provider
+# on its first locally-run apply.
+# github_repository = "ORG/REPOSITORY"
+
+tags = {
+  Owner = "platform"
+}

@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">How changes reach production safely</title>
+  <desc id="desc">Two separate, gated paths safely deliver application changes and cloud infrastructure changes to KubeMind.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0 0 10 3 0 6Z" fill="#475569"/></marker>
+    <symbol id="aws-ecr" viewBox="0 0 80 80"><rect width="80" height="80" rx="8" fill="#ED7100"/><path fill="#FFF" d="M38.8 37.6a1.8 1.8 0 0 0-.8 1.4v27.7L17 55V27.7l23.6-13.6 20.9 10.3zm25.1-13.2c0-.6-.3-1.1-.9-1.4L41.3 12.2a1.8 1.8 0 0 0-1.6 0L15.8 26.1A1.8 1.8 0 0 0 15 27.5v27.7c0 .6.3 1.1.8 1.4l21.8 12.2a1.8 1.8 0 0 0 1.6 0 1.8 1.8 0 0 0 .8-1.4V39.2l23.1-13.4c.5-.3.8-.8.8-1.4zM64 55 45 66.7V56.3l9.9-6.4.1-.5V36.4l9-5.2zm1.2-26a1.8 1.8 0 0 0-1.6 0L54 34.6c-.3.2-1 .5-1 1.3L53 48.7l-9.1 5.9c-.5.3-.9.8-.9 1.4v11.3c0 .6.3 1.1.8 1.4.3.2.6.2.9.2.3 0 .6-.1.8-.2l19.7-12a1.8 1.8 0 0 0 .8-1.4L66 30.5c0-.6-.3-1.1-.8-1.4z"/></symbol>
+    <symbol id="aws-eks" viewBox="0 0 80 80"><rect width="80" height="80" rx="8" fill="#ED7100"/><path fill="#FFF" d="m46.8 32.2-6.8 7.9 7.4 8.7h-2.8L38 41v8h-2V32h2v7l6.2-6.8zM64 48.2l-8-4.8V32c0-.4-.2-.7-.5-.9L44 24.4v-9.7L64 26.6zM65.5 25.1l-22-13A1 1 0 0 0 42 13v12c0 .4.2.7.5.9l11.5 6.7V44c0 .4.2.7.5.9l10 6A1 1 0 0 0 66 50V26a1 1 0 0 0-.5-.9zM40.4 66.9 17 54.4V26.6l20-11.8v9.7l-10.5 6.7A1 1 0 0 0 26 32v17c0 .4.2.7.5.9l13.5 7a1 1 0 0 0 .9 0l13.1-6.7 8 4.8zM64.5 54.1l-10-6a1 1 0 0 0-1 0l-13.1 6.8L28 48.4V32.5l10.5-6.7A1 1 0 0 0 39 25V13a1 1 0 0 0-1.5-.9l-22 13A1 1 0 0 0 15 26v29c0 .4.2.7.5.9l24.5 13a1 1 0 0 0 .9 0l23.6-13a1 1 0 0 0 0-1.8z"/></symbol>
+    <symbol id="aws-iam" viewBox="0 0 80 80"><rect width="80" height="80" rx="8" fill="#DD344C"/><path fill="#FFF" d="M14 59h52V21H14zm54-39v40a1 1 0 0 1-1 1H13a1 1 0 0 1-1-1V20a1 1 0 0 1 1-1h54a1 1 0 0 1 1 1zm-24 28h15v-2H44zm13-6h5v-2h-5zm-13 0h8v-2h-8zm-15 4a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm2 0a3 3 0 0 1-2 2.8V51h-2v-2.2a3 3 0 1 1 4-2.8zm-12 8 18-8v-4h-4v-2h4v-3h-4v-2h4v-3H19zm3-16h12v-7c0-2.3-2.8-4.3-6-4.3S22 28.7 22 31zm-5 17V39a1 1 0 0 1 1-1h2v-7c0-3.5 3.6-6.3 8-6.3s8 2.8 8 6.3v7h2a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H18a1 1 0 0 1-1-1zm43-18h2v-2h-2zm-16 0h11v-2H44z"/></symbol>
+    <symbol id="aws-secrets" viewBox="0 0 80 80"><rect width="80" height="80" rx="8" fill="#DD344C"/><path fill="#FFF" d="M38.8 43.4a1.2 1.2 0 1 0 2.4 0 1.2 1.2 0 0 0-2.4 0zm-2 0a3.2 3.2 0 1 1 4.4 3V49h-2v-2.6a3.2 3.2 0 0 1-2.4-3zM49 38H31v13h18v-3h-3v-2h3v-3h-3v-2h3zm-15-2h12v-5c0-2.6-2.9-5-6-5s-6 2.6-6 5zm14 0h2a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H30a1 1 0 0 1-1-1V37a1 1 0 0 1 1-1h2v-5c0-3.8 3.6-7 8-7s8 3.3 8 7zM19.2 55l1.6-1.2C18.1 50.1 16.6 45.7 16.4 41H19v-2h-2.6c.2-4.6 1.7-9 4.4-12.8L19.2 25C16.2 29.1 14.6 33.9 14.4 39H12v2h2.4c.2 5.1 1.8 9.9 4.8 14zM53.8 59.2A24 24 0 0 1 41 63.6V61h-2v2.6a24 24 0 0 1-12.8-4.4L25 60.8A26 26 0 0 0 39 65.6V68h2v-2.4a26 26 0 0 0 14-4.8zM65.6 39a26 26 0 0 0-4.8-14l-1.6 1.2A24 24 0 0 1 63.6 39H61v2h2.6a24 24 0 0 1-4.4 12.9l1.6 1.2A26 26 0 0 0 65.6 41H68v-2z"/></symbol>
+    <symbol id="icon-actions" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="#24292F"/><path d="m22 7-10 14h7l-1 12 10-15h-7z" fill="#FFF"/></symbol>
+    <symbol id="icon-docker" viewBox="0 0 40 40"><path d="M7 25h22c3 0 5-2 5-5 1.2.3 2.4.1 3.2-1.1-1 4.7-4.6 8.4-10.2 8.4H13z" fill="#2496ED"/><path d="M10 12h5v5h-5zm6 0h5v5h-5zm6 0h5v5h-5zm-6 6h5v5h-5zm6 0h5v5h-5zM7 18h5v5H7z" fill="#2496ED"/></symbol>
+    <symbol id="icon-shield" viewBox="0 0 40 40"><path d="M20 5 33 10v9c0 8-5.4 13.2-13 16-7.6-2.8-13-8-13-16v-9z" fill="#DCFCE7" stroke="#16A34A" stroke-width="2.5" stroke-linejoin="round"/><path d="m13 20 4.5 4.5L27.5 15" fill="none" stroke="#16A34A" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-terraform" viewBox="0 0 40 40"><path d="m5 11 10 5.8v11.5L5 22.5zm11 5.8L26 11v11.5L16 28.3zm11-5.8L35 6v11.5l-8 4.6z" fill="#7B42BC"/><path d="m16 29.5 10-5.8v10.6L16 40z" fill="#5C2D91"/></symbol>
+    <symbol id="icon-argo" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="#FFEDD5" stroke="#EA580C" stroke-width="2.4"/><path d="M12 25h16l-3 5H15zM16 23l4-12 4 12z" fill="#EA580C"/><path d="M8 32c3-2 5 2 8 0s5 2 8 0 5 2 8 0" fill="none" stroke="#EA580C" stroke-width="2.1" stroke-linecap="round"/></symbol>
+    <symbol id="icon-helm" viewBox="0 0 40 40"><circle cx="20" cy="20" r="14" fill="#E0F2FE" stroke="#0F6CDB" stroke-width="2.5"/><circle cx="20" cy="20" r="3" fill="#0F6CDB"/><path d="M20 6v8m0 12v8M6 20h8m12 0h8m-24-10 6 6m8 8 6 6m0-20-6 6m-8 8-6 6" stroke="#0F6CDB" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <style>
+      text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #1E293B; text-rendering: geometricPrecision; }
+      .title { font-size: 31px; font-weight: 750; letter-spacing: -.7px; }
+      .subtitle { font-size: 16px; font-weight: 450; fill: #64748B; }
+      .lane { font-size: 17px; font-weight: 750; letter-spacing: -.2px; }
+      .label { font-size: 15px; font-weight: 750; letter-spacing: -.15px; }
+      .detail { font-size: 12px; font-weight: 500; fill: #475569; }
+      .file { font-size: 11px; font-weight: 600; fill: #64748B; }
+    </style>
+  </defs>
+  <rect width="1280" height="720" rx="24" fill="#F8FAFC"/>
+  <text x="48" y="58" class="title">How changes reach production safely</text>
+  <text x="48" y="85" class="subtitle">Two separate, checked paths move application and cloud changes into the live service.</text>
+
+  <rect x="36" y="118" width="1208" height="252" rx="20" fill="#EFF6FF" stroke="#2563EB" stroke-width="2"/>
+  <text x="64" y="151" class="lane">Application updates</text>
+  <text x="64" y="173" class="detail">Test the AI → check the image → validate settings → deploy → confirm it is healthy</text>
+
+  <g>
+    <rect x="65" y="195" width="175" height="140" rx="16" fill="#FFF" stroke="#2563EB" stroke-width="2"/>
+    <use href="#icon-actions" x="134" y="208" width="36" height="36"/>
+    <text x="152" y="267" class="label" text-anchor="middle">Test the AI service</text>
+    <text x="152" y="291" class="file" text-anchor="middle">agent-deploy.yml</text>
+    <text x="152" y="313" class="detail" text-anchor="middle">answer and source checks</text>
+  </g>
+  <g>
+    <rect x="260" y="195" width="175" height="140" rx="16" fill="#FFF" stroke="#2563EB" stroke-width="2"/>
+    <use href="#icon-docker" x="314" y="208" width="36" height="36"/><use href="#icon-shield" x="348" y="208" width="36" height="36"/>
+    <text x="347" y="267" class="label" text-anchor="middle">Build and scan</text>
+    <text x="347" y="291" class="file" text-anchor="middle">image-deploy.yml</text>
+    <text x="347" y="313" class="detail" text-anchor="middle">blocks serious risks</text>
+  </g>
+  <g>
+    <rect x="455" y="195" width="175" height="140" rx="16" fill="#FFF" stroke="#ED7100" stroke-width="2"/>
+    <use href="#aws-ecr" x="522" y="208" width="40" height="40"/>
+    <text x="542" y="267" class="label" text-anchor="middle">Image library</text>
+    <text x="542" y="291" class="file" text-anchor="middle">Amazon ECR</text>
+    <text x="542" y="313" class="detail" text-anchor="middle">versioned, scanned images</text>
+  </g>
+  <g>
+    <rect x="650" y="195" width="175" height="140" rx="16" fill="#FFF" stroke="#2563EB" stroke-width="2"/>
+    <use href="#icon-helm" x="705" y="208" width="34" height="34"/><use href="#icon-shield" x="740" y="208" width="34" height="34"/>
+    <text x="737" y="267" class="label" text-anchor="middle">Check deployment</text>
+    <text x="737" y="291" class="file" text-anchor="middle">manfests-scan-push.yml</text>
+    <text x="737" y="313" class="detail" text-anchor="middle">health and security checks</text>
+  </g>
+  <g>
+    <rect x="845" y="195" width="175" height="140" rx="16" fill="#FFF" stroke="#14B8A6" stroke-width="2"/>
+    <use href="#icon-argo" x="912" y="208" width="40" height="40"/>
+    <text x="932" y="267" class="label" text-anchor="middle">Deploy changes</text>
+    <text x="932" y="291" class="file" text-anchor="middle">Argo CD + Helm</text>
+    <text x="932" y="313" class="detail" text-anchor="middle">keeps the service in sync</text>
+  </g>
+  <g>
+    <rect x="1040" y="195" width="175" height="140" rx="16" fill="#FFF" stroke="#ED7100" stroke-width="2"/>
+    <use href="#aws-eks" x="1107" y="208" width="40" height="40"/>
+    <text x="1127" y="267" class="label" text-anchor="middle">Live service</text>
+    <text x="1127" y="291" class="file" text-anchor="middle">Amazon EKS</text>
+    <text x="1127" y="313" class="detail" text-anchor="middle">rollout and health checks</text>
+  </g>
+  <path d="M240 255h20" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M435 255h20" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M630 255h20" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M825 255h20" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M1020 255h20" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <rect x="36" y="400" width="1208" height="270" rx="20" fill="#FAF5FF" stroke="#9333EA" stroke-width="2"/>
+  <text x="64" y="434" class="lane">Cloud foundation</text>
+  <text x="64" y="456" class="detail">Review the plan → approve it → create the secure cloud home → store private settings</text>
+
+  <g>
+    <rect x="95" y="490" width="180" height="140" rx="16" fill="#FFF" stroke="#9333EA" stroke-width="2"/>
+    <use href="#icon-terraform" x="167" y="503" width="36" height="36"/>
+    <text x="185" y="562" class="label" text-anchor="middle">Review cloud changes</text>
+    <text x="185" y="586" class="file" text-anchor="middle">terraform-plan.yml</text>
+    <text x="185" y="608" class="detail" text-anchor="middle">format, lint, security scan</text>
+  </g>
+  <g>
+    <rect x="318" y="490" width="180" height="140" rx="16" fill="#FFF" stroke="#9333EA" stroke-width="2"/>
+    <use href="#icon-terraform" x="390" y="503" width="36" height="36"/>
+    <text x="408" y="562" class="label" text-anchor="middle">Approve and apply</text>
+    <text x="408" y="586" class="file" text-anchor="middle">terraform-push.yml</text>
+    <text x="408" y="608" class="detail" text-anchor="middle">protected production change</text>
+  </g>
+  <g>
+    <rect x="541" y="490" width="180" height="140" rx="16" fill="#FFF" stroke="#ED7100" stroke-width="2"/>
+    <use href="#aws-eks" x="613" y="503" width="40" height="40"/>
+    <text x="631" y="562" class="label" text-anchor="middle">Cloud home</text>
+    <text x="631" y="586" class="file" text-anchor="middle">private network + EKS</text>
+    <text x="631" y="608" class="detail" text-anchor="middle">where KubeMind runs</text>
+  </g>
+  <g>
+    <rect x="764" y="490" width="180" height="140" rx="16" fill="#FFF" stroke="#DD344C" stroke-width="2"/>
+    <use href="#aws-iam" x="836" y="503" width="40" height="40"/>
+    <text x="854" y="562" class="label" text-anchor="middle">Access control</text>
+    <text x="854" y="586" class="file" text-anchor="middle">AWS IAM permissions</text>
+    <text x="854" y="608" class="detail" text-anchor="middle">only the access needed</text>
+  </g>
+  <g>
+    <rect x="987" y="490" width="180" height="140" rx="16" fill="#FFF" stroke="#DD344C" stroke-width="2"/>
+    <use href="#aws-secrets" x="1059" y="503" width="40" height="40"/>
+    <text x="1077" y="562" class="label" text-anchor="middle">Private settings</text>
+    <text x="1077" y="586" class="file" text-anchor="middle">AWS Secrets Manager</text>
+    <text x="1077" y="608" class="detail" text-anchor="middle">keeps keys out of code</text>
+  </g>
+  <path d="M275 550h43" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M498 550h43" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M721 550h43" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M944 550h43" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+</svg>

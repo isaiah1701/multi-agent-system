@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="560" viewBox="0 0 1280 560" role="img" aria-labelledby="title desc">
+  <title id="title">KubeMind AWS and Kubernetes placement</title>
+  <desc id="desc">The AWS account contains a VPC, EKS cluster, three ECR repositories, Secrets Manager, and scoped IAM roles used by GitHub Actions and External Secrets.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0 0 L10 3 L0 6 Z" fill="#475569"/></marker>
+    <!-- Official AWS Architecture Icons, inlined for GitHub README rendering. -->
+    <symbol id="aws-eks" viewBox="0 0 80 80">
+      <rect width="80" height="80" fill="#ED7100"/>
+      <path fill="#FFF" d="m46.842 32.199-6.829 7.921 7.428 8.664h-2.772L38 41v8h-2V32h2v7l6.181-6.801zM64 48.234l-8-4.801V32c0-.356-.188-.685-.496-.864l-11.5-6.71v-9.674L64 26.57zM65.509 25.139l-22-13a1 1 0 0 0-1.509.862v12c0 .355.189.684.496.864l11.5 6.71V44c0 .351.185.677.486.857l10 6a1 1 0 0 0 1.514-.857V26a1 1 0 0 0-.491-.861zM40.445 66.863 17 54.399V26.571l20-11.819v9.699l-10.537 6.705A1 1 0 0 0 26 32v17c0 .373.208.715.538.887l13.453 7a1 1 0 0 0 .921.001l13.052-6.744 8.032 4.82zM64.515 54.142l-10-6a1 1 0 0 0-.974-.03l-13.086 6.761L28 48.393V32.549l10.537-6.705A1 1 0 0 0 39 25V13a1 1 0 0 0-1.509-.861l-22 13A1 1 0 0 0 15 26v29c0 .369.204.709.53.883l24.454 13a1 1 0 0 0 .953-.008l23.547-13a1 1 0 0 0 .031-1.733z"/>
+    </symbol>
+    <symbol id="aws-ecr" viewBox="0 0 80 80">
+      <rect width="80" height="80" fill="#ED7100"/>
+      <path fill="#FFF" d="M38.788 37.578a1.85 1.85 0 0 0-.802 1.396V66.72L16.999 54.984V27.708l23.558-13.649 20.928 10.369zM63.92 24.402c0-.575-.307-1.11-.86-1.427L41.346 12.215a1.85 1.85 0 0 0-1.606.001L15.802 26.084A1.85 1.85 0 0 0 15 27.48v27.736c0 .574.308 1.108.817 1.404l21.757 12.166a1.85 1.85 0 0 0 1.607-.001 1.85 1.85 0 0 0 .804-1.396V39.201l23.133-13.403c.496-.287.802-.822.802-1.396zM63.969 55.047 44.981 66.661V56.262l9.901-6.389.068-.448c.018-.117.025-.117.025-.658l.031-12.407L64 31.148zM65.197 29.072a1.85 1.85 0 0 0-1.608-.001l-9.575 5.547c-.3.163-1.006.547-1.006 1.339l-.032 12.759-9.125 5.89c-.545.324-.869.839-.869 1.382v11.32c0 .566.305 1.083.816 1.379.267.154.564.232.859.232.291 0 .582-.074.845-.227l19.666-12.028a1.85 1.85 0 0 0 .8-1.393L66 30.466c0-.574-.308-1.108-.803-1.395z"/>
+    </symbol>
+    <symbol id="aws-secrets-manager" viewBox="0 0 80 80">
+      <rect width="80" height="80" fill="#DD344C"/>
+      <path fill="#FFF" d="M38.76 43.36a1.24 1.24 0 1 0 2.48 0 1.24 1.24 0 0 0-2.48 0zm-2 0a3.24 3.24 0 1 1 4.48 3.066V49h-2v-2.574a3.242 3.242 0 0 1-2.48-3.066zM49 38H31v13h18v-3h-3v-2h3v-3h-3v-2h3zm-15-2h12l.001-5c.001-2.616-2.857-4.998-5.997-5h-.003c-1.529 0-3.073.574-4.238 1.575C34.643 28.537 34 29.786 34 31zm14 .001L47.999 36H50c.553 0 1 .448 1 1v15c0 .552-.447 1-1 1H30c-.553 0-1-.448-1-1V37c0-.552.447-1 1-1h2v-5c.001-1.798.897-3.599 2.459-4.942C35.982 24.75 38.001 24 40.001 24h.003C44.265 24.002 48.001 27.273 48 31zM19.207 55.049l1.621-1.172C18.093 50.097 16.581 45.662 16.396 41H19v-2h-2.601c.199-4.634 1.709-9.043 4.429-12.802l-1.621-1.173C16.239 29.128 14.599 33.942 14.399 39H12v2h2.396c.186 5.086 1.828 9.926 4.811 14.049zM53.838 59.208C50.069 61.936 45.648 63.446 41 63.639V61h-2v2.639c-4.648-.192-9.07-1.702-12.841-4.431l-1.171 1.62C29.1 63.805 33.928 65.445 39 65.639V68h2v-2.361c5.072-.194 9.898-1.834 14.01-4.811zM65.599 39c-.2-5.058-1.84-9.872-4.809-13.975l-1.621 1.173C61.89 29.957 63.4 34.366 63.599 39H61v2h2.602c-.186 4.662-1.697 9.097-4.433 12.877l1.621 1.172C63.774 50.926 65.415 46.086 65.602 41H68v-2z"/>
+    </symbol>
+    <symbol id="aws-iam" viewBox="0 0 80 80">
+      <rect width="80" height="80" fill="#DD344C"/>
+      <path fill="#FFF" d="M14 59h52V21H14zm54-39v40a1 1 0 0 1-1 1H13a1 1 0 0 1-1-1V20a1 1 0 0 1 1-1h54a1 1 0 0 1 1 1zm-24 28h15v-2H44zm13-6h5v-2h-5zm-13 0h8v-2h-8zm-15 4a1 1 0 1 0-2 0 1 1 0 0 0 2 0zm2 0a3 3 0 0 1-2 2.816V51h-2v-2.185A3 3 0 1 1 31 46zm-12 7.993L36.994 54l.002-4h-4v-2h3.998l.003-2.999H33v-2h3.999L37 40.007 19.006 40zM22 38.001l12 .005V31c.001-2.303-2.803-4.323-6.003-4.325h-.001c-3.192 0-5.992 2.021-5.994 4.325zM17 54.992 17.006 39a1 1 0 0 1 1-1l1.994.001L20.002 31c.002-3.488 3.588-6.325 7.994-6.325H28c4.412.002 8.001 2.84 8 6.325l-.001 7.007h2a1 1 0 0 1 1 1L38.994 55a1 1 0 0 1-1 1L18 55.992a1 1 0 0 1-1-1zm43-18h2v-2h-2zm-16 0h11v-2H44z"/>
+    </symbol>
+    <symbol id="icon-vpc" viewBox="0 0 40 40">
+      <path d="M7 28h26M10 28V16l10-7 10 7v12M15 28v-8h10v8" fill="#8B5CF6" opacity=".16"/>
+      <path d="M7 28h26M10 28V16l10-7 10 7v12M15 28v-8h10v8" fill="none" stroke="#7C3AED" stroke-width="2.4" stroke-linejoin="round"/>
+      <circle cx="9" cy="10" r="3" fill="#C4B5FD"/><circle cx="31" cy="10" r="3" fill="#C4B5FD"/>
+    </symbol>
+    <symbol id="icon-kubernetes" viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="14" fill="#326CE5" opacity=".16"/><circle cx="20" cy="20" r="14" fill="none" stroke="#326CE5" stroke-width="2.4"/>
+      <circle cx="20" cy="20" r="4" fill="none" stroke="#326CE5" stroke-width="2.4"/>
+      <path d="m20 6 3 10m11-4-8 7M34 28l-11-4M20 34l-3-10M6 28l11-4M6 12l8 7" fill="none" stroke="#326CE5" stroke-width="2.2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-argo" viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="16" fill="#F97316" opacity=".18"/><circle cx="20" cy="20" r="16" fill="none" stroke="#EA580C" stroke-width="2.4"/>
+      <path d="M12 25h16l-3 5H15zM16 23l4-12 4 12z" fill="#EA580C"/><path d="M8 32c3-2 5 2 8 0s5 2 8 0 5 2 8 0" fill="none" stroke="#EA580C" stroke-width="2.1" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-helm" viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="14" fill="#0F6CDB" opacity=".16"/><circle cx="20" cy="20" r="10" fill="none" stroke="#0F6CDB" stroke-width="2.5"/>
+      <circle cx="20" cy="20" r="3" fill="#0F6CDB"/><path d="M20 6v8m0 12v8M6 20h8m12 0h8m-24-10 6 6m8 8 6 6m0-20-6 6m-8 8-6 6" stroke="#0F6CDB" stroke-width="2.4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-secret-sync" viewBox="0 0 40 40">
+      <path d="M10 15h20v16H10z" fill="#EC4899" opacity=".16"/><path d="M10 15h20v16H10zM15 15v-3a5 5 0 0 1 10 0v3" fill="none" stroke="#DB2777" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="m14 25 4 3 8-8M28 11l4 3-4 3" fill="none" stroke="#DB2777" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <style>
+      text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #1E293B; text-rendering: geometricPrecision; }
+      .title { font-size: 30px; font-weight: 750; letter-spacing: -.65px; }.subtitle { font-size: 15px; font-weight: 450; fill: #64748B; }
+      .group { font-size: 16px; font-weight: 700; letter-spacing: -.2px; }.label { font-size: 14px; font-weight: 700; letter-spacing: -.12px; }
+      .detail { font-size: 13px; font-weight: 450; fill: #475569; }.tiny { font-size: 11.5px; font-weight: 500; fill: #64748B; }
+    </style>
+  </defs>
+  <rect width="1280" height="560" rx="20" fill="#F8FAFC"/>
+  <text x="40" y="52" class="title">Where KubeMind runs in AWS</text>
+  <text x="40" y="78" class="subtitle">The cloud building blocks that keep the application private, available, and secure.</text>
+
+  <rect x="30" y="105" width="1220" height="415" rx="18" fill="#FFFBEB" stroke="#F59E0B" stroke-width="2"/>
+  <text x="58" y="137" class="group">KubeMind production environment</text>
+  <line x1="55" y1="150" x2="1225" y2="150" stroke="#FDE68A"/>
+
+  <rect x="60" y="178" width="250" height="145" rx="16" fill="#FFF" stroke="#FB923C" stroke-width="2"/>
+  <use href="#aws-ecr" x="82" y="205" width="52" height="52"/>
+  <text x="148" y="218" class="label">Image library</text>
+  <text x="148" y="238" class="detail">Amazon ECR</text>
+  <text x="82" y="283" class="tiny">• question coordinator</text>
+  <text x="82" y="301" class="tiny">• source finder</text>
+  <text x="82" y="319" class="tiny">• answer writer</text>
+
+  <rect x="60" y="357" width="250" height="125" rx="16" fill="#FFF1F2" stroke="#FB7185" stroke-width="2"/>
+  <use href="#aws-secrets-manager" x="82" y="382" width="52" height="52"/>
+  <text x="148" y="395" class="label">Private settings</text>
+  <text x="148" y="415" class="detail">AWS Secrets Manager</text>
+  <text x="148" y="435" class="tiny">encrypted runtime values</text>
+
+  <rect x="350" y="178" width="855" height="304" rx="16" fill="#F5F3FF" stroke="#8B5CF6" stroke-width="2"/>
+  <use href="#icon-vpc" x="378" y="174" width="28" height="28"/>
+  <path d="M410 215h83" stroke="#8B5CF6" stroke-width="4" stroke-linecap="round"/>
+  <text x="414" y="200" class="group">Private network · across availability zones</text>
+
+  <rect x="385" y="230" width="570" height="218" rx="14" fill="#FFF7ED" stroke="#ED7100" stroke-width="2"/>
+  <use href="#aws-eks" x="412" y="254" width="48" height="48"/>
+  <text x="472" y="275" class="group">KubeMind application · Amazon EKS</text>
+  <text x="472" y="295" class="detail">The managed home for the application</text>
+  <rect x="410" y="325" width="170" height="84" rx="10" fill="#EDE9FE" stroke="#8B5CF6"/>
+  <use href="#icon-kubernetes" x="482" y="331" width="26" height="26"/>
+  <text x="495" y="373" class="label" text-anchor="middle">Application</text>
+  <text x="495" y="390" class="tiny" text-anchor="middle">question · sources</text>
+  <text x="495" y="403" class="tiny" text-anchor="middle">answer · knowledge</text>
+  <rect x="600" y="325" width="170" height="84" rx="10" fill="#CCFBF1" stroke="#14B8A6"/>
+  <use href="#icon-argo" x="660" y="332" width="24" height="24"/>
+  <use href="#icon-helm" x="687" y="332" width="24" height="24"/>
+  <text x="685" y="373" class="label" text-anchor="middle">Automated updates</text>
+  <text x="685" y="390" class="tiny" text-anchor="middle">Argo CD + Helm</text>
+  <text x="685" y="403" class="tiny" text-anchor="middle">keeps it in sync</text>
+  <rect x="790" y="325" width="145" height="84" rx="10" fill="#FCE7F3" stroke="#EC4899"/>
+  <use href="#icon-secret-sync" x="850" y="331" width="26" height="26"/>
+  <text x="862" y="373" class="label" text-anchor="middle">Safe delivery</text>
+  <text x="862" y="390" class="tiny" text-anchor="middle">External Secrets</text>
+  <text x="862" y="403" class="tiny" text-anchor="middle">passes settings safely</text>
+
+  <rect x="985" y="230" width="185" height="218" rx="14" fill="#FFF1F2" stroke="#DD344C" stroke-width="2"/>
+  <use href="#aws-iam" x="1010" y="252" width="45" height="45"/>
+  <text x="1067" y="270" class="label">Access control</text>
+  <text x="1010" y="320" class="detail">AWS IAM roles</text>
+  <text x="1010" y="345" class="tiny">• publish images</text>
+  <text x="1010" y="368" class="tiny">• create infrastructure</text>
+  <text x="1010" y="391" class="tiny">• check the cluster</text>
+  <text x="1010" y="414" class="tiny">• read private settings</text>
+
+  <path d="M310 250H350V271H385" fill="none" stroke="#ED7100" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="320" y="238" class="tiny">reviewed images</text>
+  <path d="M310 420H757V367H790" fill="none" stroke="#DD344C" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="500" y="411" class="tiny">private settings</text>
+  <path d="M985 365H915" fill="none" stroke="#DD344C" stroke-width="2.5" stroke-dasharray="6 6" marker-end="url(#arrow)"/>
+  <text x="925" y="350" class="tiny" text-anchor="end">least privilege</text>
+</svg>

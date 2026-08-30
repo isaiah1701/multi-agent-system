@@ -1,0 +1,108 @@
+name: Image deploy
+
+on:
+  pull_request:
+    paths:
+      - agents/**
+      - serving/**
+      - Dockerfile
+      - compose.yaml
+      - requirements.txt
+      - .dockerignore
+      - .github/workflows/image-deploy.yml
+  workflow_run:
+    workflows: ["Agent deploy"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: Commit SHA to build, scan, and promote.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-deploy-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build-scan-and-push:
+    name: ${{ matrix.service }} image security gate and ECR promotion
+    if: >-
+      github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'v')))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            dockerfile: serving/app/Dockerfile
+          - service: orchestrator
+            dockerfile: agents/orchestrator/Dockerfile
+          - service: retriever
+            dockerfile: agents/retriever/Dockerfile
+          - service: answer
+            dockerfile: agents/answer/Dockerfile
+    env:
+      IMAGE_SHA: ${{ inputs.image_sha || github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.image_sha || github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build immutable candidate image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          load: true
+          tags: local/kubemind-${{ matrix.service }}:sha-${{ env.IMAGE_SHA }}
+          cache-from: type=gha,scope=kubemind-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=kubemind-${{ matrix.service }}
+      - name: Scan image for high and critical vulnerabilities
+        # v0.35.0. Pin the immutable commit, not a mutable action tag.
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: local/kubemind-${{ matrix.service }}:sha-${{ env.IMAGE_SHA }}
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trivy-${{ matrix.service }}-${{ env.IMAGE_SHA }}
+          path: trivy-${{ matrix.service }}.sarif
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Configure AWS credentials for ECR
+        if: github.event_name != 'pull_request'
+        uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
+        with:
+          role-to-assume: ${{ vars.AWS_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-west-2' }}
+      - name: Push only scanned immutable SHA and release tags
+        if: github.event_name != 'pull_request'
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          ECR_REGISTRY="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com"
+          SOURCE_IMAGE="local/kubemind-${SERVICE}:sha-${IMAGE_SHA}"
+          TARGET_IMAGE="${ECR_REGISTRY}/kubemind-${SERVICE}:sha-${IMAGE_SHA}"
+          aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+          docker tag "${SOURCE_IMAGE}" "${TARGET_IMAGE}"
+          docker push "${TARGET_IMAGE}"
+          for VERSION_TAG in $(git tag --points-at "${IMAGE_SHA}" --list 'v*'); do
+            docker tag "${SOURCE_IMAGE}" "${ECR_REGISTRY}/kubemind-${SERVICE}:${VERSION_TAG}"
+            docker push "${ECR_REGISTRY}/kubemind-${SERVICE}:${VERSION_TAG}"
+          done

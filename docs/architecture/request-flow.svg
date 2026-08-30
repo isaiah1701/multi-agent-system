@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="540" viewBox="0 0 1280 540" role="img" aria-labelledby="title desc">
+  <title id="title">KubeMind request path</title>
+  <desc id="desc">A user request enters Amazon EKS, passes through the orchestrator, guardrails, retrieval, and answer agent, and returns a cited answer.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0 0 L10 3 L0 6 Z" fill="#475569"/></marker>
+    <marker id="orangeArrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0 0 L10 3 L0 6 Z" fill="#ED7100"/></marker>
+    <!-- Official AWS Architecture Icon: Amazon EKS. Kept inline because GitHub does not load nested SVG images. -->
+    <symbol id="aws-eks" viewBox="0 0 80 80">
+      <rect width="80" height="80" fill="#ED7100"/>
+      <path fill="#FFF" d="m46.842 32.199-6.829 7.921 7.428 8.664h-2.772L38 41v8h-2V32h2v7l6.181-6.801zM64 48.234l-8-4.801V32c0-.356-.188-.685-.496-.864l-11.5-6.71v-9.674L64 26.57zM65.509 25.139l-22-13a1 1 0 0 0-1.509.862v12c0 .355.189.684.496.864l11.5 6.71V44c0 .351.185.677.486.857l10 6a1 1 0 0 0 1.514-.857V26a1 1 0 0 0-.491-.861zM40.445 66.863 17 54.399V26.571l20-11.819v9.699l-10.537 6.705A1 1 0 0 0 26 32v17c0 .373.208.715.538.887l13.453 7a1 1 0 0 0 .921.001l13.052-6.744 8.032 4.82zM64.515 54.142l-10-6a1 1 0 0 0-.974-.03l-13.086 6.761L28 48.393V32.549l10.537-6.705A1 1 0 0 0 39 25V13a1 1 0 0 0-1.509-.861l-22 13A1 1 0 0 0 15 26v29c0 .369.204.709.53.883l24.454 13a1 1 0 0 0 .953-.008l23.547-13a1 1 0 0 0 .031-1.733z"/>
+    </symbol>
+    <symbol id="icon-orchestrator" viewBox="0 0 40 40">
+      <path d="M9 12 20 7l11 5v16l-11 5-11-5z" fill="#7C3AED" opacity=".18"/>
+      <path d="m9 12 11 5 11-5M20 17v16M9 28l11-5 11 5" fill="none" stroke="#7C3AED" stroke-width="2.4" stroke-linejoin="round"/>
+      <circle cx="9" cy="12" r="3.5" fill="#7C3AED"/><circle cx="31" cy="12" r="3.5" fill="#7C3AED"/><circle cx="20" cy="33" r="3.5" fill="#7C3AED"/>
+    </symbol>
+    <symbol id="icon-shield" viewBox="0 0 40 40">
+      <path d="M20 5 33 10v9c0 8-5.4 13.2-13 16-7.6-2.8-13-8-13-16v-9z" fill="#EC4899" opacity=".18"/>
+      <path d="M20 5 33 10v9c0 8-5.4 13.2-13 16-7.6-2.8-13-8-13-16v-9z" fill="none" stroke="#DB2777" stroke-width="2.6" stroke-linejoin="round"/>
+      <path d="m13 20 4.5 4.5L27.5 15" fill="none" stroke="#DB2777" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-retriever" viewBox="0 0 40 40">
+      <circle cx="17" cy="17" r="10" fill="#8B5CF6" opacity=".18"/><circle cx="17" cy="17" r="10" fill="none" stroke="#7C3AED" stroke-width="2.8"/>
+      <path d="m24 24 9 9M13 17h8M17 13v8" stroke="#7C3AED" stroke-width="2.8" stroke-linecap="round"/>
+      <circle cx="30" cy="10" r="3" fill="#C4B5FD"/>
+    </symbol>
+    <symbol id="icon-answer" viewBox="0 0 40 40">
+      <path d="M7 9h26v18H18l-7 6v-6H7z" fill="#8B5CF6" opacity=".18"/>
+      <path d="M7 9h26v18H18l-7 6v-6H7z" fill="none" stroke="#7C3AED" stroke-width="2.6" stroke-linejoin="round"/>
+      <path d="M14 16h12M14 21h8" stroke="#7C3AED" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="m30 5 .9 2.1L33 8l-2.1.9L30 11l-.9-2.1L27 8l2.1-.9z" fill="#F59E0B"/>
+    </symbol>
+    <style>
+      text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #1E293B; text-rendering: geometricPrecision; }
+      .title { font-size: 30px; font-weight: 750; letter-spacing: -.65px; }
+      .subtitle { font-size: 15px; font-weight: 450; fill: #64748B; }
+      .group { font-size: 16px; font-weight: 700; letter-spacing: -.2px; }
+      .label { font-size: 15px; font-weight: 700; letter-spacing: -.15px; }
+      .detail { font-size: 13px; font-weight: 450; fill: #475569; }
+      .tiny { font-size: 11.5px; font-weight: 500; fill: #64748B; }
+    </style>
+  </defs>
+  <rect width="1280" height="540" rx="20" fill="#F8FAFC"/>
+  <text x="40" y="52" class="title">How a question becomes a trusted answer</text>
+  <text x="40" y="78" class="subtitle">Each request is checked, researched, and returned with sources.</text>
+
+  <rect x="20" y="120" width="145" height="110" rx="16" fill="#FFF7ED" stroke="#FB923C" stroke-width="2"/>
+  <circle cx="92" cy="156" r="19" fill="#F97316"/><circle cx="92" cy="151" r="7" fill="#FFF"/><path d="M78 178c3-12 25-12 28 0" fill="#FFF"/>
+  <text x="92" y="204" class="label" text-anchor="middle">Ask a question</text>
+
+  <rect x="205" y="120" width="145" height="110" rx="16" fill="#E0F2FE" stroke="#38BDF8" stroke-width="2"/>
+  <path d="M251 158h52M251 170h52M251 182h52" stroke="#0284C7" stroke-width="4" stroke-linecap="round"/>
+  <text x="278" y="204" class="label" text-anchor="middle">Secure entry point</text>
+  <text x="278" y="220" class="tiny" text-anchor="middle">API or in-cluster client</text>
+
+  <rect x="385" y="105" width="855" height="375" rx="18" fill="#FFF7ED" stroke="#ED7100" stroke-width="2"/>
+  <use href="#aws-eks" x="410" y="128" width="42" height="42"/>
+  <text x="462" y="150" class="group">KubeMind application · Amazon EKS</text>
+  <text x="462" y="171" class="detail">A private, managed environment for the application</text>
+  <line x1="410" y1="190" x2="1215" y2="190" stroke="#FED7AA"/>
+
+  <rect x="410" y="225" width="130" height="92" rx="12" fill="#EDE9FE" stroke="#8B5CF6" stroke-width="2"/>
+  <use href="#icon-orchestrator" x="458" y="231" width="34" height="34"/>
+  <text x="475" y="282" class="label" text-anchor="middle">Plan the question</text>
+  <text x="475" y="300" class="tiny" text-anchor="middle">routes the request</text>
+
+  <rect x="575" y="225" width="118" height="92" rx="46" fill="#FCE7F3" stroke="#EC4899" stroke-width="2"/>
+  <use href="#icon-shield" x="619" y="230" width="30" height="30"/>
+  <text x="634" y="266" class="label" text-anchor="middle">Safety</text>
+  <text x="634" y="285" class="label" text-anchor="middle">check</text>
+
+  <rect x="728" y="225" width="130" height="92" rx="12" fill="#EDE9FE" stroke="#8B5CF6" stroke-width="2"/>
+  <use href="#icon-retriever" x="776" y="231" width="34" height="34"/>
+  <text x="793" y="282" class="label" text-anchor="middle">Find sources</text>
+  <text x="793" y="300" class="tiny" text-anchor="middle">Kubernetes evidence</text>
+
+  <rect x="893" y="225" width="130" height="92" rx="12" fill="#EDE9FE" stroke="#8B5CF6" stroke-width="2"/>
+  <use href="#icon-answer" x="941" y="231" width="34" height="34"/>
+  <text x="958" y="282" class="label" text-anchor="middle">Write the answer</text>
+  <text x="958" y="300" class="tiny" text-anchor="middle">with clear citations</text>
+
+  <rect x="1058" y="225" width="118" height="92" rx="46" fill="#FCE7F3" stroke="#EC4899" stroke-width="2"/>
+  <use href="#icon-shield" x="1102" y="230" width="30" height="30"/>
+  <text x="1117" y="266" class="label" text-anchor="middle">Final</text>
+  <text x="1117" y="285" class="label" text-anchor="middle">check</text>
+
+  <path d="M165 175H205" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M350 175H410V271" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M540 271H575" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M693 271H728" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M858 271H893" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M1023 271H1058" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <path d="M1117 317v143H98V230" fill="none" stroke="#ED7100" stroke-width="2.5" stroke-dasharray="7 7" marker-end="url(#orangeArrow)"/>
+  <text x="245" y="447" class="tiny" fill="#C2410C">cited answer</text>
+
+  <rect x="690" y="370" width="150" height="64" rx="12" fill="#DCFCE7" stroke="#4ADE80" stroke-width="2"/>
+  <ellipse cx="723" cy="392" rx="15" ry="7" fill="#22C55E"/><path d="M708 392v17c0 9 30 9 30 0v-17" fill="#BBF7D0" stroke="#22C55E"/>
+  <text x="775" y="397" class="label" text-anchor="middle">Knowledge store</text>
+  <text x="775" y="415" class="tiny" text-anchor="middle">search index</text>
+  <path d="M793 317V370" stroke="#22C55E" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
+
+  <rect x="930" y="370" width="190" height="64" rx="12" fill="#FEE2E2" stroke="#FB7185" stroke-width="2"/>
+  <path d="M950 395h24v22h-24z" fill="#FB7185"/><path d="M955 395v-7a7 7 0 0 1 14 0v7" fill="none" stroke="#FB7185" stroke-width="4"/>
+  <text x="1042" y="397" class="label" text-anchor="middle">Private settings</text>
+  <text x="1042" y="415" class="tiny" text-anchor="middle">runtime configuration</text>
+  <path d="M1042 370V317" stroke="#FB7185" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
+</svg>

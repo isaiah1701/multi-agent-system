@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Applies the complete KubeMind AWS + Kubernetes deployment. It creates the
+# EKS cluster before configuring kubectl for it and never prints secret values.
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+bootstrap_dir="$repo_root/serving/terraform/bootstrap"
+production_dir="$repo_root/serving/terraform/environments/prod"
+runtime_input="$bootstrap_dir/runtime-secret.auto.tfvars"
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+require_file() {
+  test -f "$1" || fail "Required file is missing: $1"
+}
+
+: "${AWS_PROFILE:?Export AWS_PROFILE for the target AWS account before running this script.}"
+deployment_profile="$AWS_PROFILE"
+
+# Prefer the selected profile over any stale shell credentials.
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+export AWS_REGION="${AWS_REGION:-eu-west-2}"
+export AWS_DEFAULT_REGION="$AWS_REGION"
+
+actual_account_id=$(aws sts get-caller-identity --query Account --output text)
+printf 'Targeting AWS account %s in %s with profile %s.\n' "$actual_account_id" "$AWS_REGION" "$deployment_profile"
+
+require_file "$bootstrap_dir/terraform.tfvars"
+require_file "$runtime_input"
+require_file "$production_dir/prod.tfvars"
+require_file "$repo_root/serving/helm/values/production.yaml"
+
+if rg -q 'PASTE_.*_HERE|replace-me' "$runtime_input"; then
+  fail "Replace all runtime-secret.auto.tfvars placeholders before applying."
+fi
+
+if rg -q 'https://github.com/ORG/REPOSITORY.git' "$repo_root/helmfile.yaml"; then
+  fail "Replace the placeholder Git repository URL in helmfile.yaml before applying."
+fi
+
+printf 'Applying bootstrap Terraform in AWS account %s...\n' "$actual_account_id"
+terraform -chdir="$bootstrap_dir" init -input=false
+terraform -chdir="$bootstrap_dir" apply -input=false -auto-approve
+
+terraform -chdir="$bootstrap_dir" output -raw production_backend_hcl > "$production_dir/backend.hcl"
+terraform_role_arn=$(terraform -chdir="$bootstrap_dir" output -raw terraform_execution_role_arn)
+
+printf 'Assuming the bootstrap-created Terraform role...\n'
+read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN < <(
+  aws sts assume-role \
+    --role-arn "$terraform_role_arn" \
+    --role-session-name kubemind-production-apply \
+    --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
+    --output text
+)
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+unset AWS_PROFILE
+
+printf 'Applying production Terraform...\n'
+terraform -chdir="$production_dir" init -reconfigure -input=false -backend-config=backend.hcl
+terraform -chdir="$production_dir" apply -input=false -auto-approve
+cluster_name=$(terraform -chdir="$production_dir" output -raw cluster_name)
+
+# Helm and kubectl must authenticate as the operator profile, not the Terraform
+# execution role. The operator should be included in eks_access_entries.
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+export AWS_PROFILE="$deployment_profile"
+aws eks update-kubeconfig --name "$cluster_name" --region "$AWS_REGION" --profile "$deployment_profile"
+
+printf 'Installing ESO, Argo CD, and Argo applications...\n'
+helmfile -f "$repo_root/helmfile.yaml" apply
+
+printf 'Waiting for ESO and the runtime Secret...\n'
+kubectl -n external-secrets rollout status deployment/external-secrets --timeout=5m
+kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/kubemind-agent-services --timeout=10m
+kubectl -n kubemind wait --for=condition=Ready externalsecret/kubemind-runtime --timeout=10m
+
+for deployment in kubemind-api kubemind-orchestrator kubemind-retriever kubemind-answer; do
+  kubectl -n kubemind rollout status "deployment/$deployment" --timeout=10m
+done
+
+printf 'Deployment complete.\n'

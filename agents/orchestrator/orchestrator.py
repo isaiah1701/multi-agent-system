@@ -4,22 +4,20 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import importlib.util
 import logging
-import sys
 from uuid import uuid4
-from pathlib import Path
 from typing import Annotated, Any, Literal, Required, TypedDict
-from types import ModuleType
 
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
-from agents.conversation import is_contextual_kubernetes_follow_up
+from agents.orchestrator.remote import answer_remote, remote_agents_configured, retrieve_and_context_remote
+from agents.orchestrator.shared.conversation import is_contextual_kubernetes_follow_up, is_source_only_follow_up
+from agents.orchestrator.shared.evidence import source_follow_up_answer
 from guardrails import is_kubernetes_question
-from observability import flush_traces, observe, update_current_span
+from serving.app.langfuse import flush_traces, observe, update_current_span
 
 
 LOGGER = logging.getLogger(__name__)
@@ -32,35 +30,16 @@ class AgentState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     is_relevant: bool
     tool_results: list[dict[str, Any]]
+    sources: list[dict[str, str | None]]
     context: str
     answer: str
 
 
-def _load_subagent_module(name: str) -> ModuleType:
-    """Load an agent from the repository's intentionally hyphenated directory."""
-    package_name = "agents.sub_agents"
-    agent_directory = Path(__file__).resolve().parents[1] / "sub-agents"
-    if package_name not in sys.modules:
-        package = ModuleType(package_name)
-        package.__path__ = [str(agent_directory)]
-        sys.modules[package_name] = package
-    module_name = f"{package_name}.{name}"
-    if module_name in sys.modules:
-        return sys.modules[module_name]
-    specification = importlib.util.spec_from_file_location(module_name, agent_directory / f"{name}.py")
-    if specification is None or specification.loader is None:
-        raise ImportError(f"Could not load sub-agent module: {name}")
-    module = importlib.util.module_from_spec(specification)
-    sys.modules[module_name] = module
-    specification.loader.exec_module(module)
-    return module
-
-
-# Answer is loaded first because the tool/context node reuses its evidence-formatting helper.
-answer = _load_subagent_module("answer").answer
-tool_agent = _load_subagent_module("retrieve")
-use_tools = tool_agent.use_tools
-add_context = tool_agent.add_context
+# These remain unset in the production image. The local development graph
+# populates them lazily so existing in-process testing remains available.
+use_tools: Any | None = None
+add_context: Any | None = None
+answer: Any | None = None
 
 
 @observe(name="input-guardrail", as_type="guardrail", capture_input=False, capture_output=False)
@@ -72,28 +51,70 @@ def input_guardrail(state: AgentState) -> dict[str, bool]:
     return {"is_relevant": is_kubernetes_question(question) or is_contextual_kubernetes_follow_up(question, state)}
 
 
-def route_after_guardrail(state: AgentState) -> Literal["use_tools", "reject"]:
-    return "use_tools" if state.get("is_relevant") else "reject"
+def route_after_guardrail(state: AgentState) -> Literal["use_tools", "reuse_sources", "reject"]:
+    if not state.get("is_relevant"):
+        return "reject"
+    sources = state.get("sources")
+    if is_source_only_follow_up(str(state.get("question", ""))) and isinstance(sources, list) and sources:
+        return "reuse_sources"
+    return "use_tools"
 
 
-def reject(_: AgentState) -> dict[str, str]:
-    return {"answer": "I can only answer Kubernetes and related platform infrastructure questions."}
+def reject(_: AgentState) -> dict[str, object]:
+    return {
+        "answer": "I can only answer Kubernetes and related platform infrastructure questions.",
+        "sources": [],
+    }
+
+
+def reuse_sources(state: AgentState) -> dict[str, object]:
+    """Answer source-only contextual questions without tools or an LLM call."""
+    sources = state.get("sources")
+    if not isinstance(sources, list) or not sources:
+        return {"answer": "I don't have enough sourced evidence to answer that reliably.", "sources": []}
+    answer_text = source_follow_up_answer(sources)
+    return {"answer": answer_text, "messages": [AIMessage(content=answer_text)]}
 
 
 def build_app(*, checkpointer: Any | None = None) -> Any:
     """Compile the guarded tool-selection → context → answer workflow."""
+    global add_context, answer, use_tools
+    if remote_agents_configured():
+        retrieval_node = retrieve_and_context_remote
+        answer_node = answer_remote
+    else:
+        # Development-only in-process execution. Production images configure
+        # both URLs and therefore never import the other agent implementations.
+        if not callable(use_tools) or not callable(add_context) or not callable(answer):
+            from agents.answer.agent import answer as local_answer
+            from agents.retriever.agent import add_context as local_add_context
+            from agents.retriever.agent import use_tools as local_use_tools
+
+            answer = local_answer
+            use_tools = local_use_tools
+            add_context = local_add_context
+        answer_node = answer
+        retrieval_node = None
     graph = StateGraph(AgentState)
     graph.add_node("input_guardrail", input_guardrail)
-    graph.add_node("use_tools", use_tools)
-    graph.add_node("add_context", add_context)
-    graph.add_node("answer", answer)
+    if retrieval_node is None:
+        if not callable(use_tools) or not callable(add_context) or not callable(answer_node):
+            raise RuntimeError("In-process agent modules could not be loaded")
+        graph.add_node("use_tools", use_tools)
+        graph.add_node("add_context", add_context)
+        graph.add_edge("use_tools", "add_context")
+        graph.add_edge("add_context", "answer")
+    else:
+        graph.add_node("use_tools", retrieval_node)
+        graph.add_edge("use_tools", "answer")
+    graph.add_node("answer", answer_node)
     graph.add_node("reject", reject)
+    graph.add_node("reuse_sources", reuse_sources)
     graph.add_edge(START, "input_guardrail")
     graph.add_conditional_edges("input_guardrail", route_after_guardrail)
-    graph.add_edge("use_tools", "add_context")
-    graph.add_edge("add_context", "answer")
     graph.add_edge("answer", END)
     graph.add_edge("reject", END)
+    graph.add_edge("reuse_sources", END)
     return graph.compile(checkpointer=checkpointer)
 
 

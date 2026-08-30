@@ -1,0 +1,12 @@
+{{- if .Values.agentServices.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kubemind.fullname" . }}-config
+  labels:
+    {{- include "kubemind.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | toString | quote }}
+  {{- end }}
+{{- end }}

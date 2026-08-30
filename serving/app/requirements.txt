@@ -1,0 +1,5 @@
+# Public browser/API service. It proxies only to the private orchestration service.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+httpx>=0.27,<1.0
+langfuse>=4.0,<5.0

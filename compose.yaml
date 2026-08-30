@@ -1,0 +1,143 @@
+name: kubemind
+
+x-agent-environment: &agent-environment
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  CONTEXT_MODEL: ${CONTEXT_MODEL:-claude-haiku-4-5-20251001}
+  ANSWER_MODEL: ${ANSWER_MODEL:-claude-sonnet-5}
+  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+  LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+  LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}
+  LANGFUSE_TRACING_ENVIRONMENT: ${LANGFUSE_TRACING_ENVIRONMENT:-development}
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: serving/app/Dockerfile
+    image: kubemind-api:local
+    ports:
+      - "8000:8000"
+      - "8080:8000"
+    environment:
+      ORCHESTRATOR_SERVICE_URL: http://orchestrator:8080
+      AGENT_SERVICE_TIMEOUT_SECONDS: "120"
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}
+      LANGFUSE_TRACING_ENVIRONMENT: ${LANGFUSE_TRACING_ENVIRONMENT:-development}
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: agents/orchestrator/Dockerfile
+    image: kubemind-orchestrator:local
+    environment:
+      <<: *agent-environment
+      RETRIEVER_AGENT_URL: http://retriever:8081
+      ANSWER_AGENT_URL: http://answer:8082
+      AGENT_SERVICE_TIMEOUT_SECONDS: "120"
+    depends_on:
+      retriever:
+        condition: service_healthy
+      answer:
+        condition: service_healthy
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health').read()"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  retriever:
+    build:
+      context: .
+      dockerfile: agents/retriever/Dockerfile
+    image: kubemind-retriever:local
+    environment: *agent-environment
+    volumes:
+      - chroma-data:/app/data/chroma
+      - model-cache:/home/app/.cache/huggingface
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health').read()"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  answer:
+    build:
+      context: .
+      dockerfile: agents/answer/Dockerfile
+    image: kubemind-answer:local
+    environment: *agent-environment
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health').read()"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  ingest:
+    build:
+      context: .
+      dockerfile: agents/retriever/Dockerfile
+    image: kubemind-retriever:local
+    profiles: ["ingest"]
+    command: ["python", "-m", "ingestion.ingest"]
+    environment: *agent-environment
+    volumes:
+      - chroma-data:/app/data/chroma
+      - model-cache:/home/app/.cache/huggingface
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=1777
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  chroma-data:
+  model-cache:

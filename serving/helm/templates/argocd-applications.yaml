@@ -1,0 +1,87 @@
+{{- if .Values.bootstrap.enabled }}
+{{- $repoURL := required "git.repoURL is required" .Values.git.repoURL }}
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ .Values.project.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  description: KubeMind services managed through Argo CD.
+  sourceRepos:
+    - {{ $repoURL }}
+    - {{ .Values.langfuse.chartRepo }}
+  destinations:
+    - namespace: {{ .Values.agentServices.namespace }}
+      server: {{ .Values.destination.server }}
+    - namespace: {{ .Values.langfuse.namespace }}
+      server: {{ .Values.destination.server }}
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Values.langfuse.name }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.project.name }}
+  source:
+    repoURL: {{ .Values.langfuse.chartRepo }}
+    chart: {{ .Values.langfuse.chart }}
+    targetRevision: {{ .Values.langfuse.chartVersion | quote }}
+    helm:
+      releaseName: {{ .Values.langfuse.name }}
+      valuesObject:
+        {{- toYaml .Values.langfuse.values | nindent 8 }}
+  destination:
+    server: {{ .Values.destination.server }}
+    namespace: {{ .Values.langfuse.namespace }}
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    {{- if .Values.syncPolicy.automated }}
+    automated:
+      prune: {{ .Values.syncPolicy.prune }}
+      selfHeal: {{ .Values.syncPolicy.selfHeal }}
+    {{- end }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Values.agentServices.name }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.project.name }}
+  source:
+    repoURL: {{ $repoURL }}
+    targetRevision: {{ .Values.git.targetRevision }}
+    path: {{ .Values.agentServices.chartPath }}
+    helm:
+      releaseName: kubemind
+      valueFiles:
+        - values/base.yaml
+        - values/production.yaml
+  destination:
+    server: {{ .Values.destination.server }}
+    namespace: {{ .Values.agentServices.namespace }}
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    {{- if .Values.syncPolicy.automated }}
+    automated:
+      prune: {{ .Values.syncPolicy.prune }}
+      selfHeal: {{ .Values.syncPolicy.selfHeal }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,84 @@
+name: Agent deploy
+
+on:
+  pull_request:
+    paths:
+      - agents/**
+      - eval/**
+      - guardrails/**
+      - ingestion/**
+      - observability/**
+      - serving/**
+      - tests/**
+      - requirements.txt
+      - .github/workflows/agent-deploy.yml
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - agents/**
+      - eval/**
+      - guardrails/**
+      - ingestion/**
+      - observability/**
+      - serving/**
+      - tests/**
+      - requirements.txt
+      - .github/workflows/agent-deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-contracts:
+    name: Orchestrator and agent contract gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt
+      - name: Test orchestration, retrieval, and answer-service contracts
+        run: python -m unittest discover -s tests -v
+
+  golden-set:
+    name: Retrieval and answer golden-set gate
+    needs: agent-contracts
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt
+      - name: Run the production graph against the golden set
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LANGFUSE_PUBLIC_KEY: ""
+          LANGFUSE_SECRET_KEY: ""
+        run: python -m eval.evaluate
+      - name: Enforce golden-set scoring thresholds
+        run: python scripts/check_golden_set.py --summary eval/summary.json
+      - name: Upload golden-set evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: golden-set-${{ github.sha }}
+          path: |
+            eval/results.jsonl
+            eval/summary.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any
 
 from agents.orchestrator.orchestrator import invoke
-from llm.client import create_message
-from llm.config import JUDGE_MAX_TOKENS, JUDGE_MODEL
-from observability import flush_traces, observe, update_current_span
+from agents.orchestrator.llm.client import create_message
+from agents.orchestrator.llm.config import JUDGE_MAX_TOKENS, JUDGE_MODEL
+from serving.app.langfuse import flush_traces, observe, update_current_span
 
 
 EVAL_DIRECTORY = Path(__file__).resolve().parent

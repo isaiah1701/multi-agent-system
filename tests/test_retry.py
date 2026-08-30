@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from resilience.retry import DEFAULT_BACKOFF_SECONDS, retry_async, retry_sync
+from agents.orchestrator.retry import DEFAULT_BACKOFF_SECONDS, retry_async, retry_sync
 
 
 class RetryTests(unittest.TestCase):

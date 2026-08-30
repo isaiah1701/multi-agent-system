@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kubemind
+description: Helm chart for the KubeMind Argo CD bootstrap and agent services.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
