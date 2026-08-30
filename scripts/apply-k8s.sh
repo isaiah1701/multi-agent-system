@@ -63,7 +63,7 @@ unset AWS_PROFILE
 
 printf 'Applying production Terraform...\n'
 terraform -chdir="$production_dir" init -reconfigure -input=false -backend-config=backend.hcl
-terraform -chdir="$production_dir" apply -input=false -auto-approve
+terraform -chdir="$production_dir" apply -input=false -auto-approve -var-file=prod.tfvars
 cluster_name=$(terraform -chdir="$production_dir" output -raw cluster_name)
 
 # Helm and kubectl must authenticate as the operator profile, not the Terraform

@@ -314,7 +314,10 @@ data "aws_iam_policy_document" "terraform_execution" {
   statement {
     sid     = "ReadKubeMindRuntimeSecretMetadata"
     effect  = "Allow"
-    actions = ["secretsmanager:DescribeSecret"]
+    actions = [
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
+    ]
 
     resources = [
       "arn:${data.aws_partition.current.partition}:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.runtime_secret_name}-*"
