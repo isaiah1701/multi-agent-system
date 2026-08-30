@@ -3,6 +3,12 @@ variable "github_repository" {
   type        = string
 }
 
+variable "github_oidc_subjects" {
+  description = "Additional exact GitHub OIDC subject patterns, for example immutable repository-ID subjects."
+  type        = list(string)
+  default     = []
+}
+
 variable "repository_arns" {
   description = "ECR repository ARNs the role may push to."
   type        = list(string)

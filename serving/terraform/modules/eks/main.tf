@@ -43,7 +43,6 @@ module "eks" {
     }
 
     aws-ebs-csi-driver = {
-      before_compute           = true
       service_account_role_arn = aws_iam_role.ebs_csi_driver.arn
     }
   }

@@ -144,6 +144,7 @@ module "github_actions_ecr" {
   source = "../../modules/github-actions-ecr"
 
   github_repository           = var.github_repository
+  github_oidc_subjects        = var.github_oidc_subjects
   repository_arns             = [for repository in module.ecr : repository.repository_arn]
   role_name                   = "${var.project_name}-${var.environment}-ecr-promotion"
   create_github_oidc_provider = var.create_github_oidc_provider

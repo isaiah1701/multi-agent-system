@@ -118,6 +118,12 @@ variable "github_repository" {
   default     = null
 }
 
+variable "github_oidc_subjects" {
+  description = "Additional exact GitHub Actions OIDC subjects, including immutable repository-ID subjects when enabled."
+  type        = list(string)
+  default     = []
+}
+
 variable "create_github_oidc_provider" {
   description = "Create the account-wide GitHub Actions OIDC provider. Set false if the AWS account already has one."
   type        = bool

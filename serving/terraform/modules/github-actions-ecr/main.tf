@@ -38,10 +38,10 @@ data "aws_iam_policy_document" "assume_role" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values = [
+      values = concat([
         "repo:${var.github_repository}:ref:refs/heads/main",
         "repo:${var.github_repository}:ref:refs/tags/v*"
-      ]
+      ], var.github_oidc_subjects)
     }
   }
 }

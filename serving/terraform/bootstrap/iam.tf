@@ -138,6 +138,7 @@ data "aws_iam_policy_document" "terraform_execution" {
       "ec2:DeleteTags",
       "ec2:DeleteVpc",
       "ec2:DescribeAddresses",
+      "ec2:DescribeAddressesAttribute",
       "ec2:DescribeAvailabilityZones",
       "ec2:DescribeInternetGateways",
       "ec2:DescribeLaunchTemplates",
@@ -145,7 +146,9 @@ data "aws_iam_policy_document" "terraform_execution" {
       "ec2:DescribeNatGateways",
       "ec2:DescribeRouteTables",
       "ec2:DescribeSecurityGroups",
+      "ec2:DescribeSecurityGroupRules",
       "ec2:DescribeSubnets",
+      "ec2:DescribeTags",
       "ec2:DescribeVpcAttribute",
       "ec2:DescribeVpcs",
       "ec2:DetachInternetGateway",
@@ -154,6 +157,7 @@ data "aws_iam_policy_document" "terraform_execution" {
       "ec2:ModifySubnetAttribute",
       "ec2:ModifyVpcAttribute",
       "ec2:ReleaseAddress",
+      "ec2:RunInstances",
       "ec2:RevokeSecurityGroupEgress",
       "ec2:RevokeSecurityGroupIngress"
     ]
@@ -175,6 +179,13 @@ data "aws_iam_policy_document" "terraform_execution" {
     effect = "Allow"
     actions = [
       "eks:CreateAddon",
+      "eks:CreateAccessEntry",
+      "eks:AssociateAccessPolicy",
+      "eks:DeleteAccessEntry",
+      "eks:DescribeAccessEntry",
+      "eks:DisassociateAccessPolicy",
+      "eks:ListAccessEntries",
+      "eks:ListAssociatedAccessPolicies",
       "eks:CreateCluster",
       "eks:CreateNodegroup",
       "eks:CreatePodIdentityAssociation",
@@ -197,6 +208,7 @@ data "aws_iam_policy_document" "terraform_execution" {
       "eks:UpdateAddon",
       "eks:UpdateClusterConfig",
       "eks:UpdateClusterVersion",
+      "eks:UpdateAccessEntry",
       "eks:UpdateNodegroupConfig",
       "eks:UpdateNodegroupVersion",
       "eks:UpdatePodIdentityAssociation"
@@ -237,6 +249,7 @@ data "aws_iam_policy_document" "terraform_execution" {
 
     resources = [
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${var.cluster_name}-*",
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/default-eks-node-group-*",
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/tech-test-ebs-csi-driver",
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-ecr-promotion",
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-secrets"
@@ -299,21 +312,32 @@ data "aws_iam_policy_document" "terraform_execution" {
     actions = ["iam:CreateServiceLinkedRole"]
 
     resources = [
-      "arn:${data.aws_partition.current.partition}:iam::*:role/aws-service-role/eks.amazonaws.com/AWSServiceRoleForAmazonEKS"
+      "arn:${data.aws_partition.current.partition}:iam::*:role/aws-service-role/eks.amazonaws.com/AWSServiceRoleForAmazonEKS",
+      "arn:${data.aws_partition.current.partition}:iam::*:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
     ]
 
     condition {
       test     = "StringEquals"
       variable = "iam:AWSServiceName"
-      values   = ["eks.amazonaws.com"]
+      values   = ["eks.amazonaws.com", "eks-nodegroup.amazonaws.com"]
     }
+  }
+
+  statement {
+    sid     = "ReadEksNodegroupServiceLinkedRole"
+    effect  = "Allow"
+    actions = ["iam:GetRole"]
+
+    resources = [
+      "arn:${data.aws_partition.current.partition}:iam::*:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
+    ]
   }
 
   # Production Terraform only needs to resolve the bootstrap-created secret's
   # ARN; ESO receives GetSecretValue through its own Pod Identity role.
   statement {
-    sid     = "ReadKubeMindRuntimeSecretMetadata"
-    effect  = "Allow"
+    sid    = "ReadKubeMindRuntimeSecretMetadata"
+    effect = "Allow"
     actions = [
       "secretsmanager:DescribeSecret",
       "secretsmanager:GetResourcePolicy",
@@ -333,6 +357,7 @@ data "aws_iam_policy_document" "terraform_execution" {
 
     resources = [
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${var.cluster_name}-*",
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/default-eks-node-group-*",
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/tech-test-ebs-csi-driver"
     ]
 
