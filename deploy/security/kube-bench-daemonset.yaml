@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kubemind-kube-bench
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: kubemind-kube-bench
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubemind-kube-bench
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubemind-kube-bench
+    spec:
+      # kube-bench inspects node process and configuration state. It needs no
+      # Kubernetes API credential and receives only read-only host mounts.
+      automountServiceAccountToken: false
+      hostPID: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: kube-bench
+          image: docker.io/aquasec/kube-bench@sha256:75506f222d1eb6ce2a751a5533bdc0a3b54c898e2e49e7751d0ee22cfb862679
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              kube-bench run --targets node,policies,managedservices,controlplane --benchmark eks-1.5.0
+              # Keep successful findings available for the CI log collector.
+              sleep 600
+          resources:
+            requests:
+              cpu: 5m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: false
+          volumeMounts:
+            - name: var-lib-kubelet
+              mountPath: /var/lib/kubelet
+              readOnly: true
+            - name: etc-systemd
+              mountPath: /etc/systemd
+              readOnly: true
+            - name: etc-kubernetes
+              mountPath: /etc/kubernetes
+              readOnly: true
+      volumes:
+        - name: var-lib-kubelet
+          hostPath:
+            path: /var/lib/kubelet
+            type: Directory
+        - name: etc-systemd
+          hostPath:
+            path: /etc/systemd
+            type: Directory
+        - name: etc-kubernetes
+          hostPath:
+            path: /etc/kubernetes
+            type: DirectoryOrCreate
