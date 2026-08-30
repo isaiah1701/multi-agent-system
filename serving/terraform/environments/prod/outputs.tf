@@ -18,6 +18,11 @@ output "github_actions_ecr_role_arn" {
   value       = try(module.github_actions_ecr[0].role_arn, null)
 }
 
+output "github_actions_cluster_validation_role_arn" {
+  description = "Set this value as the protected GitHub variable AWS_CLUSTER_VALIDATION_ROLE_ARN."
+  value       = try(aws_iam_role.github_actions_cluster_validation[0].arn, null)
+}
+
 output "runtime_secret_id" {
   description = "AWS Secrets Manager secret ID created and populated by the bootstrap stack."
   value       = data.aws_secretsmanager_secret.kubemind_runtime.name

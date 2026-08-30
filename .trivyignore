@@ -3,3 +3,8 @@
 # superseded metadata bundled in the upstream Python base layer.
 GHSA-6v7p-g79w-8964
 CVE-2025-47273
+
+# KSV-0109 misidentifies numeric token-budget settings as credentials. Runtime
+# credentials are never rendered into this ConfigMap; ESO supplies them from
+# AWS Secrets Manager instead.
+KSV-0109

@@ -32,7 +32,13 @@ locals {
     Environment = var.environment
     ManagedBy   = "terraform"
   }, var.tags)
+
+  github_oidc_provider_arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
 }
+
+data "aws_caller_identity" "current" {}
+
+data "aws_partition" "current" {}
 
 # The bootstrap stack creates and writes this secret before production runs.
 # Production resolves only its ARN to scope ESO's read permission.
@@ -127,9 +133,21 @@ module "eks" {
   min_size                        = var.eks_min_size
   max_size                        = var.eks_max_size
   desired_size                    = var.eks_desired_size
-  access_entries                  = var.eks_access_entries
-  kms_key_administrators          = var.eks_kms_key_administrators
-  tags                            = local.tags
+  access_entries = merge(var.eks_access_entries, var.github_repository == null ? {} : {
+    github_actions_cluster_validation = {
+      principal_arn = aws_iam_role.github_actions_cluster_validation[0].arn
+      policy_associations = {
+        cluster_admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  })
+  kms_key_administrators = var.eks_kms_key_administrators
+  tags                   = local.tags
 }
 
 module "ecr" {
@@ -149,4 +167,67 @@ module "github_actions_ecr" {
   role_name                   = "${var.project_name}-${var.environment}-ecr-promotion"
   create_github_oidc_provider = var.create_github_oidc_provider
   tags                        = local.tags
+}
+
+# The post-deploy GitHub Actions gate has a dedicated identity: unlike image
+# promotion, it can read the cluster and authenticate to its Kubernetes API,
+# but it has no ECR write permissions.
+data "aws_iam_policy_document" "github_actions_cluster_validation_assume_role" {
+  count = var.github_repository == null ? 0 : 1
+
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [local.github_oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values = concat([
+        "repo:${var.github_repository}:ref:refs/heads/main",
+        "repo:${var.github_repository}:ref:refs/tags/v*",
+      ], var.github_oidc_subjects)
+    }
+  }
+}
+
+data "aws_iam_policy_document" "github_actions_cluster_validation" {
+  count = var.github_repository == null ? 0 : 1
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "eks:AccessKubernetesApi",
+      "eks:DescribeCluster",
+    ]
+    resources = ["arn:${data.aws_partition.current.partition}:eks:${var.aws_region}:${data.aws_caller_identity.current.account_id}:cluster/${var.cluster_name}"]
+  }
+}
+
+resource "aws_iam_role" "github_actions_cluster_validation" {
+  count = var.github_repository == null ? 0 : 1
+
+  name               = "${var.project_name}-${var.environment}-cluster-validation"
+  description        = "GitHub Actions OIDC role limited to KubeMind EKS rollout validation"
+  assume_role_policy = data.aws_iam_policy_document.github_actions_cluster_validation_assume_role[0].json
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy" "github_actions_cluster_validation" {
+  count = var.github_repository == null ? 0 : 1
+
+  name   = "eks-rollout-validation"
+  role   = aws_iam_role.github_actions_cluster_validation[0].id
+  policy = data.aws_iam_policy_document.github_actions_cluster_validation[0].json
 }

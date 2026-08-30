@@ -20,15 +20,17 @@ require_file() {
 
 : "${AWS_PROFILE:?Export AWS_PROFILE for the target AWS account before running this script.}"
 deployment_profile="$AWS_PROFILE"
+bootstrap_profile="${BOOTSTRAP_AWS_PROFILE:-$deployment_profile}"
 
 # Prefer the selected profile over any stale shell credentials.
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+export AWS_PROFILE="$bootstrap_profile"
 
 export AWS_REGION="${AWS_REGION:-eu-west-2}"
 export AWS_DEFAULT_REGION="$AWS_REGION"
 
 actual_account_id=$(aws sts get-caller-identity --query Account --output text)
-printf 'Targeting AWS account %s in %s with profile %s.\n' "$actual_account_id" "$AWS_REGION" "$deployment_profile"
+printf 'Targeting AWS account %s in %s with bootstrap profile %s.\n' "$actual_account_id" "$AWS_REGION" "$bootstrap_profile"
 
 require_file "$bootstrap_dir/terraform.tfvars"
 require_file "$runtime_input"
@@ -73,7 +75,9 @@ export AWS_PROFILE="$deployment_profile"
 aws eks update-kubeconfig --name "$cluster_name" --region "$AWS_REGION" --profile "$deployment_profile"
 
 printf 'Installing ESO, Argo CD, and Argo applications...\n'
-helmfile -f "$repo_root/helmfile.yaml" apply
+# `sync` directly invokes `helm upgrade`, so it remains compatible with Helm 4
+# as well as Helm 3 installations that do not have the Helm diff plugin.
+helmfile -f "$repo_root/helmfile.yaml" sync
 
 printf 'Waiting for ESO and the runtime Secret...\n'
 kubectl -n external-secrets rollout status deployment/external-secrets --timeout=5m
