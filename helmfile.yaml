@@ -45,6 +45,9 @@ releases:
     values:
       - clusterName: prod-cluster
         region: eu-west-2
+        # Nodes enforce IMDSv2 with a one-hop limit, so the controller cannot
+        # discover the VPC through pod network metadata.
+        vpcId: vpc-0ccb8b192396b4ae6
         serviceAccount:
           create: true
           name: aws-load-balancer-controller
