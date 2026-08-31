@@ -6,7 +6,7 @@ images:
     tag: sha-2d42bd7e8550880932c8f08a0136d2b82048802f
   orchestrator:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-orchestrator
-    tag: sha-2d42bd7e8550880932c8f08a0136d2b82048802f
+    tag: sha-4626cbf5165e701bed3daeef1564f58845278fba
   retriever:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-retriever
     tag: sha-2d42bd7e8550880932c8f08a0136d2b82048802f
