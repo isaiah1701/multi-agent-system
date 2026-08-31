@@ -36,6 +36,7 @@ ingress:
   enabled: false
   className: alb
   hostname: ""
+  ruleHostname: ""
   tls:
     enabled: false
   annotations: {}
