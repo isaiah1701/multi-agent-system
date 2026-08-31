@@ -12,7 +12,7 @@ images:
     tag: sha-2d42bd7e8550880932c8f08a0136d2b82048802f
   answer:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-answer
-    tag: sha-fa062c927d9472b756d20e1d09702cbd31515ccf
+    tag: sha-74d087f5c1ab62a2aa8a6522ce143da5ba337ee3
 
 ingress:
   enabled: true
