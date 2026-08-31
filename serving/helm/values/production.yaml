@@ -3,16 +3,16 @@
 images:
   api:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-api
-    tag: sha-625e1ba55a91c76bbd97db228d3e0fd686992291
+    tag: sha-2d42bd7e8550880932c8f08a0136d2b82048802f
   orchestrator:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-orchestrator
-    tag: sha-625e1ba55a91c76bbd97db228d3e0fd686992291
+    tag: sha-2d42bd7e8550880932c8f08a0136d2b82048802f
   retriever:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-retriever
-    tag: sha-625e1ba55a91c76bbd97db228d3e0fd686992291
+    tag: sha-2d42bd7e8550880932c8f08a0136d2b82048802f
   answer:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-answer
-    tag: sha-625e1ba55a91c76bbd97db228d3e0fd686992291
+    tag: sha-2d42bd7e8550880932c8f08a0136d2b82048802f
 
 ingress:
   enabled: true
