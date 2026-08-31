@@ -32,3 +32,8 @@ output "external_secrets_role_arn" {
   description = "EKS Pod Identity role used by External Secrets Operator."
   value       = aws_iam_role.external_secrets.arn
 }
+
+output "aws_load_balancer_controller_role_arn" {
+  description = "Pod Identity role used by the AWS Load Balancer Controller."
+  value       = module.aws_load_balancer_controller.role_arn
+}

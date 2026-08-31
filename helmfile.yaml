@@ -1,6 +1,8 @@
 repositories:
   - name: argo
     url: https://argoproj.github.io/argo-helm
+  - name: eks
+    url: https://aws.github.io/eks-charts
   - name: external-secrets
     url: https://charts.external-secrets.io
 
@@ -34,12 +36,26 @@ releases:
     labels:
       app: argocd
 
+  - name: aws-load-balancer-controller
+    namespace: kube-system
+    chart: eks/aws-load-balancer-controller
+    version: 1.14.0
+    labels:
+      app: aws-load-balancer-controller
+    values:
+      - clusterName: prod-cluster
+        region: eu-west-2
+        serviceAccount:
+          create: true
+          name: aws-load-balancer-controller
+
   - name: kubemind-bootstrap
     namespace: argocd
     chart: ./serving/helm
     needs:
       - external-secrets/external-secrets
       - argocd/argocd
+      - kube-system/aws-load-balancer-controller
     labels:
       app: kubemind-bootstrap
     values:

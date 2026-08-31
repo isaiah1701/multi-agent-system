@@ -54,8 +54,7 @@ ensure_langfuse_runtime_secret() {
   printf 'Created Langfuse runtime secret %s.\n' "$langfuse_runtime_secret_name"
 }
 
-: "${AWS_PROFILE:?Export AWS_PROFILE for the target AWS account before running this script.}"
-deployment_profile="$AWS_PROFILE"
+deployment_profile="${AWS_PROFILE:-isaiahAug26}"
 bootstrap_profile="${BOOTSTRAP_AWS_PROFILE:-$deployment_profile}"
 
 # Prefer the selected profile over any stale shell credentials.

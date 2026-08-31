@@ -153,6 +153,13 @@ module "eks" {
   tags                   = local.tags
 }
 
+module "aws_load_balancer_controller" {
+  source = "../../modules/aws-load-balancer-controller"
+
+  cluster_name = module.eks.cluster_name
+  tags         = local.tags
+}
+
 module "ecr" {
   for_each = local.service_names
   source   = "../../modules/ecr"

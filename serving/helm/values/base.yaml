@@ -32,6 +32,11 @@ images:
     repository: ""
     tag: ""
 
+ingress:
+  enabled: false
+  className: alb
+  annotations: {}
+
 config:
   CONTEXT_MODEL: claude-haiku-4-5-20251001
   ANSWER_MODEL: claude-sonnet-5
