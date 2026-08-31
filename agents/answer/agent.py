@@ -84,7 +84,7 @@ add background, offer more help, or add a source list. Do not use Markdown headi
 
 Every substantive factual claim needs at least one compact citation such as [1]. You may cite only IDs supplied in
 the evidence. Never invent an ID, URL, source, or fact. If the evidence is insufficient, say exactly: "I don't have
-enough sourced evidence to answer that reliably." This sentence needs no citation. Put the first citation in the
+enough sourced evidence to answer that reliably." This sentence needs no citation and must be the complete answer. Put the first citation in the
 first sentence so the verified response can stream safely. Never combine the insufficient-evidence sentence with
 another answer. When cited evidence is supplied, answer from it instead."""
 
@@ -109,10 +109,12 @@ def _remove_mixed_insufficient_evidence_preamble(answer: str) -> str:
     preserving the latter is more useful and does not weaken the evidence gate.
     """
     normalized = answer.strip()
-    if not normalized.startswith(INSUFFICIENT_EVIDENCE_MESSAGE):
+    if INSUFFICIENT_EVIDENCE_MESSAGE not in normalized or not re.search(r"\[\d+\]", normalized):
         return normalized
-    remainder = normalized[len(INSUFFICIENT_EVIDENCE_MESSAGE) :].lstrip(" \t\n.:—–-")
-    return remainder if re.search(r"\[\d+\]", remainder) else normalized
+    # Models occasionally append the fallback after an otherwise cited answer.
+    # It is valid only as the complete response, regardless of where it appears.
+    cleaned = normalized.replace(INSUFFICIENT_EVIDENCE_MESSAGE, " ")
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
 def format_tool_results(tool_results: list[Mapping[str, object]]) -> str:

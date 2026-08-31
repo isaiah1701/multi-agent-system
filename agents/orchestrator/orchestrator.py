@@ -40,6 +40,7 @@ class AgentState(TypedDict, total=False):
     question: Required[str]
     messages: Annotated[list[BaseMessage], add_messages]
     is_relevant: bool
+    is_ambiguous: bool
     tool_results: list[dict[str, Any]]
     sources: list[dict[str, str | None]]
     context: str
@@ -100,18 +101,21 @@ async def input_guardrail(state: AgentState) -> dict[str, bool]:
     if not isinstance(question, str) or not question.strip():
         raise ValueError("A non-empty question is required")
     if is_contextual_kubernetes_follow_up(question, state):
-        return {"is_relevant": True}
+        return {"is_relevant": True, "is_ambiguous": False}
     relevance = classify_kubernetes_relevance(question)
     if relevance.allowed:
-        return {"is_relevant": True}
+        return {"is_relevant": True, "is_ambiguous": False}
     if "clearly_irrelevant" in relevance.matched_domains:
-        return {"is_relevant": False}
-    return {"is_relevant": not await _is_obviously_out_of_scope(question)}
+        return {"is_relevant": False, "is_ambiguous": False}
+    rejected = await _is_obviously_out_of_scope(question)
+    return {"is_relevant": not rejected, "is_ambiguous": not rejected}
 
 
-def route_after_guardrail(state: AgentState) -> Literal["use_tools", "reuse_sources", "reject"]:
+def route_after_guardrail(state: AgentState) -> Literal["use_tools", "reuse_sources", "general", "reject"]:
     if not state.get("is_relevant"):
         return "reject"
+    if state.get("is_ambiguous"):
+        return "general"
     sources = state.get("sources")
     if is_source_only_follow_up(str(state.get("question", ""))) and isinstance(sources, list) and sources:
         return "reuse_sources"
@@ -123,6 +127,22 @@ def reject(_: AgentState) -> dict[str, object]:
         "answer": "I can only answer Kubernetes and related platform infrastructure questions.",
         "sources": [],
     }
+
+
+def general(state: AgentState) -> dict[str, object]:
+    """Answer benign conversational prompts without inventing evidence or facts."""
+    question = str(state.get("question", "")).casefold()
+    if any(phrase in question for phrase in ("what are you", "who are you", "what can you do", "help")):
+        answer_text = (
+            "I’m KubeMind, a Kubernetes and platform-infrastructure assistant. "
+            "I can help explain clusters, workloads, networking, deployments, and cloud platform operations."
+        )
+    else:
+        answer_text = (
+            "I’m KubeMind, a Kubernetes and platform-infrastructure assistant. "
+            "Tell me what you’re looking at or what you want to do, and I’ll help narrow it down."
+        )
+    return {"answer": answer_text, "sources": [], "messages": [AIMessage(content=answer_text)]}
 
 
 def reuse_sources(state: AgentState) -> dict[str, object]:
@@ -167,11 +187,13 @@ def build_app(*, checkpointer: Any | None = None) -> Any:
         graph.add_edge("use_tools", "answer")
     graph.add_node("answer", answer_node)
     graph.add_node("reject", reject)
+    graph.add_node("general", general)
     graph.add_node("reuse_sources", reuse_sources)
     graph.add_edge(START, "input_guardrail")
     graph.add_conditional_edges("input_guardrail", route_after_guardrail)
     graph.add_edge("answer", END)
     graph.add_edge("reject", END)
+    graph.add_edge("general", END)
     graph.add_edge("reuse_sources", END)
     return graph.compile(checkpointer=checkpointer)
 

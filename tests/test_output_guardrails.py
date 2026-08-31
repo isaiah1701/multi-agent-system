@@ -99,6 +99,17 @@ class OutputGuardrailTests(unittest.TestCase):
 
         self.assertEqual(result["answer"], "A PDB limits voluntary disruption during maintenance. [1]")
 
+    def test_answer_removes_an_insufficient_evidence_suffix_from_a_cited_answer(self) -> None:
+        mixed_answer = (
+            "A PDB limits voluntary disruption during maintenance. [1] "
+            f"{INSUFFICIENT_EVIDENCE_MESSAGE}"
+        )
+        state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": [], "sources": [self.source]}
+        with patch("agents.answer.agent.generate_text", new=AsyncMock(return_value=mixed_answer)):
+            result = asyncio.run(answer(state))
+
+        self.assertEqual(result["answer"], "A PDB limits voluntary disruption during maintenance. [1]")
+
     def test_budget_guardrail_keeps_ordinary_questions_on_the_small_cap(self) -> None:
         budget = select_answer_budget("What is a PodDisruptionBudget?")
 

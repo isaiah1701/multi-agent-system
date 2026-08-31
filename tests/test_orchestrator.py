@@ -197,6 +197,21 @@ class OrchestratorTests(unittest.TestCase):
         self.assertTrue(result["is_relevant"])
         scope_judge.assert_not_called()
 
+    def test_ambiguous_conversational_prompt_returns_a_useful_general_answer(self) -> None:
+        with (
+            patch(
+                "agents.orchestrator.orchestrator.create_message",
+                return_value={"content": [{"text": '{"obviously_not_kubernetes_or_infrastructure": false}'}]},
+            ) as scope_judge,
+            patch("agents.retriever.agent.create_message") as tool_model,
+        ):
+            result = asyncio.run(build_app().ainvoke({"question": "what are you"}))
+        self.assertTrue(result["is_relevant"])
+        self.assertIn("KubeMind", result["answer"])
+        self.assertEqual(result["sources"], [])
+        scope_judge.assert_called_once()
+        tool_model.assert_not_called()
+
     def test_unknown_tool_request_is_returned_safely(self) -> None:
         with (
             patch(
