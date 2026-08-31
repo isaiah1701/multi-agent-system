@@ -110,6 +110,17 @@ class OutputGuardrailTests(unittest.TestCase):
 
         self.assertEqual(result["answer"], "A PDB limits voluntary disruption during maintenance. [1]")
 
+    def test_answer_removes_a_broader_insufficient_evidence_sentence_from_a_cited_answer(self) -> None:
+        mixed_answer = (
+            "ECS is simpler to operate. [1] "
+            "The available evidence does not compare EKS, so I don't have enough sourced evidence to recommend one."
+        )
+        state = {"question": "ECS or EKS?", "context": "Evidence", "tool_results": [], "sources": [self.source]}
+        with patch("agents.answer.agent.generate_text", new=AsyncMock(return_value=mixed_answer)):
+            result = asyncio.run(answer(state))
+
+        self.assertEqual(result["answer"], "ECS is simpler to operate. [1]")
+
     def test_budget_guardrail_keeps_ordinary_questions_on_the_small_cap(self) -> None:
         budget = select_answer_budget("What is a PodDisruptionBudget?")
 

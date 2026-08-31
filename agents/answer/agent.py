@@ -109,12 +109,18 @@ def _remove_mixed_insufficient_evidence_preamble(answer: str) -> str:
     preserving the latter is more useful and does not weaken the evidence gate.
     """
     normalized = answer.strip()
-    if INSUFFICIENT_EVIDENCE_MESSAGE not in normalized or not re.search(r"\[\d+\]", normalized):
+    if "don't have enough sourced evidence" not in normalized.casefold() or not re.search(r"\[\d+\]", normalized):
         return normalized
-    # Models occasionally append the fallback after an otherwise cited answer.
-    # It is valid only as the complete response, regardless of where it appears.
-    cleaned = normalized.replace(INSUFFICIENT_EVIDENCE_MESSAGE, " ")
-    return re.sub(r"\s{2,}", " ", cleaned).strip()
+    # Models occasionally append or blend the fallback into an otherwise cited
+    # answer. It is valid only as the complete response, so remove the fallback
+    # clause (and its optional evidence-preface) without discarding citations
+    # that conventionally appear at the end of the preceding sentence.
+    fallback_clause = re.compile(
+        r"(?:\b(?:the|this|available)\b[^.!?]*?\b)?(?:,\s*so\s+)?"
+        r"\bI don't have enough sourced evidence[^.!?]*[.!?]",
+        re.IGNORECASE,
+    )
+    return re.sub(r"\s{2,}", " ", fallback_clause.sub("", normalized)).strip()
 
 
 def format_tool_results(tool_results: list[Mapping[str, object]]) -> str:
