@@ -32,6 +32,23 @@ variable "runtime_secret_name" {
   }
 }
 
+variable "domain_name" {
+  description = "Root domain delegated to the Route 53 public hosted zone. Set null to leave DNS and HTTPS disabled."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.domain_name == null || can(regex("^[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$", var.domain_name))
+    error_message = "domain_name must be a valid DNS domain name or null."
+  }
+}
+
+variable "wait_for_acm_validation" {
+  description = "Wait for ACM issuance only after the registrar delegates the domain to Route 53."
+  type        = bool
+  default     = false
+}
+
 variable "kubernetes_version" {
   description = "EKS Kubernetes version."
   type        = string

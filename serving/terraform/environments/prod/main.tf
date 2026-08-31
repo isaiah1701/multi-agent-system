@@ -34,6 +34,17 @@ locals {
   }, var.tags)
 
   github_oidc_provider_arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
+  dns_enabled              = var.domain_name != null && trimspace(var.domain_name) != ""
+  dns_controller_subjects = local.dns_enabled ? {
+    external_dns = {
+      namespace       = "external-dns"
+      service_account = "external-dns"
+    }
+    cert_manager = {
+      namespace       = "cert-manager"
+      service_account = "cert-manager"
+    }
+  } : {}
 }
 
 data "aws_caller_identity" "current" {}
@@ -158,6 +169,101 @@ module "aws_load_balancer_controller" {
 
   cluster_name = module.eks.cluster_name
   tags         = local.tags
+}
+
+# The public zone is deliberately created in the workload account. Delegating
+# the root domain to its returned name servers at the registrar is the only
+# external DNS step; ACM validation and all application records stay managed
+# here afterwards.
+module "route53" {
+  count  = local.dns_enabled ? 1 : 0
+  source = "../../modules/route53"
+
+  domain_name         = var.domain_name
+  wait_for_validation = var.wait_for_acm_validation
+}
+
+data "aws_iam_policy_document" "dns_controller_assume_role" {
+  for_each = local.dns_controller_subjects
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "sts:AssumeRole",
+      "sts:TagSession",
+    ]
+
+    principals {
+      type        = "Service"
+      identifiers = ["pods.eks.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/kubernetes-namespace"
+      values   = [each.value.namespace]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/kubernetes-service-account"
+      values   = [each.value.service_account]
+    }
+  }
+}
+
+resource "aws_iam_role" "dns_controller" {
+  for_each = local.dns_controller_subjects
+
+  name               = "${var.project_name}-${var.environment}-${replace(each.key, "_", "-")}"
+  description        = "Route 53 access for the ${each.key} Kubernetes controller"
+  assume_role_policy = data.aws_iam_policy_document.dns_controller_assume_role[each.key].json
+  tags               = local.tags
+}
+
+data "aws_iam_policy_document" "dns_controller_route53" {
+  for_each = local.dns_controller_subjects
+
+  statement {
+    sid    = "ChangeKubeMindZoneRecords"
+    effect = "Allow"
+    actions = [
+      "route53:ChangeResourceRecordSets",
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:route53:::hostedzone/${module.route53[0].zone_id}",
+    ]
+  }
+
+  statement {
+    sid    = "ReadRoute53ZonesAndChanges"
+    effect = "Allow"
+    actions = [
+      "route53:GetChange",
+      "route53:ListHostedZones",
+      "route53:ListHostedZonesByName",
+      "route53:ListResourceRecordSets",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "dns_controller_route53" {
+  for_each = local.dns_controller_subjects
+
+  name   = "route53-zone-management"
+  role   = aws_iam_role.dns_controller[each.key].id
+  policy = data.aws_iam_policy_document.dns_controller_route53[each.key].json
+}
+
+resource "aws_eks_pod_identity_association" "dns_controller" {
+  for_each = local.dns_controller_subjects
+
+  cluster_name    = module.eks.cluster_name
+  namespace       = each.value.namespace
+  service_account = each.value.service_account
+  role_arn        = aws_iam_role.dns_controller[each.key].arn
 }
 
 module "ecr" {

@@ -35,6 +35,9 @@ images:
 ingress:
   enabled: false
   className: alb
+  hostname: ""
+  tls:
+    enabled: false
   annotations: {}
 
 config:

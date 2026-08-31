@@ -37,3 +37,13 @@ output "aws_load_balancer_controller_role_arn" {
   description = "Pod Identity role used by the AWS Load Balancer Controller."
   value       = module.aws_load_balancer_controller.role_arn
 }
+
+output "route53_name_servers" {
+  description = "Delegate the domain at its registrar to these Route 53 name servers."
+  value       = try(module.route53[0].name_servers, [])
+}
+
+output "acm_certificate_arn" {
+  description = "Regional ACM certificate automatically discovered by the AWS Load Balancer Controller."
+  value       = try(module.route53[0].certificate_arn, null)
+}

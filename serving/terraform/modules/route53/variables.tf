@@ -7,3 +7,9 @@ variable "validation_method" {
   description = "How the ACM validates your domain"
   default     = "DNS"
 }
+
+variable "wait_for_validation" {
+  description = "Whether Terraform should wait for public DNS delegation and ACM certificate issuance."
+  type        = bool
+  default     = false
+}

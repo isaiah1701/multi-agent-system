@@ -5,6 +5,10 @@ repositories:
     url: https://aws.github.io/eks-charts
   - name: external-secrets
     url: https://charts.external-secrets.io
+  - name: jetstack
+    url: https://charts.jetstack.io
+  - name: external-dns
+    url: https://kubernetes-sigs.github.io/external-dns/
 
 helmDefaults:
   atomic: true
@@ -52,6 +56,42 @@ releases:
           create: true
           name: aws-load-balancer-controller
 
+  - name: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: v1.21.1
+    labels:
+      app: cert-manager
+    values:
+      - crds:
+          enabled: true
+          keep: true
+        serviceAccount:
+          create: true
+          name: cert-manager
+
+  - name: external-dns
+    namespace: external-dns
+    chart: external-dns/external-dns
+    version: 1.21.1
+    needs:
+      - cert-manager/cert-manager
+    labels:
+      app: external-dns
+    values:
+      - provider:
+          name: aws
+        sources:
+          - ingress
+        policy: sync
+        registry: txt
+        txtOwnerId: kubemind-prod-cluster
+        domainFilters:
+          - 5hort.site
+        serviceAccount:
+          create: true
+          name: external-dns
+
   - name: kubemind-bootstrap
     namespace: argocd
     chart: ./serving/helm
@@ -59,6 +99,8 @@ releases:
       - external-secrets/external-secrets
       - argocd/argocd
       - kube-system/aws-load-balancer-controller
+      - cert-manager/cert-manager
+      - external-dns/external-dns
     labels:
       app: kubemind-bootstrap
     values:

@@ -31,6 +31,8 @@ resource "aws_route53_record" "application" {
 }
 
 resource "aws_acm_certificate_validation" "example" {
+  count = var.wait_for_validation ? 1 : 0
+
   certificate_arn         = aws_acm_certificate.application.arn
   validation_record_fqdns = [for record in aws_route53_record.application : record.fqdn]
 }
