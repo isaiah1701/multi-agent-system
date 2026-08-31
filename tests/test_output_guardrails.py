@@ -84,6 +84,8 @@ class OutputGuardrailTests(unittest.TestCase):
         self.assertEqual(generate.await_args.kwargs["max_tokens"], ANSWER_MAX_TOKENS)
         system = generate.await_args.kwargs["system"]
         self.assertIn(f"about {ANSWER_TARGET_WORDS} words", system)
+        self.assertIn("Lead with the useful answer", system)
+        self.assertIn('label it as an "Estimate" or "Recommendation"', system)
         self.assertIn("Finish every sentence", system)
         self.assertIn("Do not use Markdown headings", system)
         self.assertIn("Structured evidence", str(generate.await_args.kwargs["prompt"]))
