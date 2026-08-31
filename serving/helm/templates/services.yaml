@@ -35,6 +35,30 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
+      {{- if eq $name "retriever" }}
+      # The documentation corpus is built into the retriever image, while its
+      # index lives on the Chroma PVC. Build (or refresh) that index before the
+      # API starts so ordinary Kubernetes questions always have citable data.
+      initContainers:
+        - name: ingest-kubernetes-corpus
+          image: "{{ required (printf "images.%s.repository is required" $name) $image.repository }}:{{ required (printf "images.%s.tag is required" $name) $image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "ingestion.ingest", "--db-path", "/app/data/chroma", "--device", "cpu"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml $service.resources | nindent 12 }}
+          volumeMounts:
+            - name: chroma
+              mountPath: /app/data/chroma
+            - name: model-cache
+              mountPath: /home/app/.cache/huggingface
+            - name: temporary
+              mountPath: /tmp
+      {{- end }}
       containers:
         - name: {{ $name }}
           image: "{{ required (printf "images.%s.repository is required" $name) $image.repository }}:{{ required (printf "images.%s.tag is required" $name) $image.tag }}"

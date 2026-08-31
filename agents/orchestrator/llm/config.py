@@ -37,4 +37,9 @@ JUDGE_MAX_TOKENS = int(os.getenv("JUDGE_MAX_TOKENS", "80"))
 # Haiku is used only after a deterministic output check requests review.
 OUTPUT_GUARD_JUDGE_MODEL = os.getenv("OUTPUT_GUARD_JUDGE_MODEL", "claude-haiku-4-5-20251001")
 OUTPUT_GUARD_JUDGE_MAX_TOKENS = int(os.getenv("OUTPUT_GUARD_JUDGE_MAX_TOKENS", "48"))
+# Haiku is used only when a question has no deterministic Kubernetes or
+# platform-infrastructure signal. It must identify questions that are plainly
+# out of scope; ambiguous wording is intentionally allowed through.
+INPUT_GUARD_JUDGE_MODEL = os.getenv("INPUT_GUARD_JUDGE_MODEL", "claude-haiku-4-5-20251001")
+INPUT_GUARD_JUDGE_MAX_TOKENS = int(os.getenv("INPUT_GUARD_JUDGE_MAX_TOKENS", "32"))
 PROMPT_CACHING_ENABLED = os.getenv("PROMPT_CACHING_ENABLED", "true").strip().casefold() not in {"0", "false", "no"}

@@ -97,11 +97,11 @@ class SessionMemoryTests(unittest.TestCase):
                 HumanMessage(content="When would I use one?"),
             ],
         }
-        self.assertTrue(input_guardrail(state)["is_relevant"])
+        self.assertTrue(self._run(input_guardrail(state))["is_relevant"])
 
         state["question"] = "What are the football scores?"
         state["messages"][-1] = HumanMessage(content="What are the football scores?")
-        self.assertFalse(input_guardrail(state)["is_relevant"])
+        self.assertFalse(self._run(input_guardrail(state))["is_relevant"])
 
     def test_recognises_compact_source_follow_up_phrases(self) -> None:
         for question in ("source?", "where's your source?", "which docs?", "where did you get that from?"):
@@ -144,7 +144,7 @@ class SessionMemoryTests(unittest.TestCase):
             )
             other_thread = self._run(
                 app.ainvoke(
-                    {"question": "source?", "messages": [HumanMessage(content="source?")]},
+                    {"question": "football scores", "messages": [HumanMessage(content="football scores")]},
                     config={"configurable": {"thread_id": "other-thread"}},
                 )
             )

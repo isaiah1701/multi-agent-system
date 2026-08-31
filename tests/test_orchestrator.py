@@ -7,7 +7,7 @@ import unittest
 from typing import Any
 from unittest.mock import patch
 
-from agents.orchestrator.orchestrator import build_app
+from agents.orchestrator.orchestrator import build_app, input_guardrail
 from agents.answer.agent import INSUFFICIENT_EVIDENCE_MESSAGE
 
 
@@ -159,6 +159,7 @@ class OrchestratorTests(unittest.TestCase):
 
     def test_irrelevant_questions_stop_before_model_or_tools(self) -> None:
         with (
+            patch("agents.orchestrator.orchestrator.create_message") as scope_judge,
             patch("agents.retriever.agent.create_message") as tool_model,
             patch("agents.retriever.agent.generate_text", return_value="general guidance briefing") as context_model,
             patch("agents.answer.agent.generate_text", return_value="grounded answer") as answer_model,
@@ -166,10 +167,35 @@ class OrchestratorTests(unittest.TestCase):
         ):
             result = asyncio.run(build_app().ainvoke({"question": "What is the capital of France?"}))
         self.assertEqual(result["answer"], "I can only answer Kubernetes and related platform infrastructure questions.")
+        scope_judge.assert_not_called()
         tool_model.assert_not_called()
         context_model.assert_not_called()
         answer_model.assert_not_called()
         tools.assert_not_called()
+
+    def test_unknown_wording_uses_haiku_and_allows_ambiguous_question(self) -> None:
+        with patch(
+            "agents.orchestrator.orchestrator.create_message",
+            return_value={"content": [{"text": '{"obviously_not_kubernetes_or_infrastructure": false}'}]},
+        ) as scope_judge:
+            result = asyncio.run(input_guardrail({"question": "explain what this is"}))
+        self.assertTrue(result["is_relevant"])
+        scope_judge.assert_called_once()
+
+    def test_haiku_rejects_only_an_explicit_obviously_out_of_scope_verdict(self) -> None:
+        with patch(
+            "agents.orchestrator.orchestrator.create_message",
+            return_value={"content": [{"text": '{"obviously_not_kubernetes_or_infrastructure": true}'}]},
+        ) as scope_judge:
+            result = asyncio.run(input_guardrail({"question": "can you write a limerick?"}))
+        self.assertFalse(result["is_relevant"])
+        scope_judge.assert_called_once()
+
+    def test_deterministic_kubernetes_question_skips_haiku_scope_judge(self) -> None:
+        with patch("agents.orchestrator.orchestrator.create_message") as scope_judge:
+            result = asyncio.run(input_guardrail({"question": "Why is my deployment unavailable?"}))
+        self.assertTrue(result["is_relevant"])
+        scope_judge.assert_not_called()
 
     def test_unknown_tool_request_is_returned_safely(self) -> None:
         with (
