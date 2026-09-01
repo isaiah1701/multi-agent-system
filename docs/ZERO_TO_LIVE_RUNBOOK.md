@@ -215,6 +215,18 @@ kubectl -n argocd delete application kubemind-agent-services langfuse --ignore-n
 # Remove Helmfile-owned controllers and their Kubernetes resources.
 helmfile -f helmfile.yaml destroy
 
+# ExternalDNS aliases are outside Terraform state. Inspect and delete only the
+# A/AAAA/TXT records it created; keep NS/SOA and the Terraform-managed ACM CNAME.
+ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name 5hort.site \
+  --query 'HostedZones[?Name==`5hort.site.`].Id' --output text | sed 's#^/hostedzone/##')
+aws route53 list-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+  --query 'ResourceRecordSets[?Type==`A` || Type==`AAAA` || Type==`TXT`]' --output json \
+  | jq '{Changes: map({Action:"DELETE", ResourceRecordSet:.})}' \
+  > /tmp/kubemind-external-dns-records.json
+# Review this file before running the next command; it must not contain NS, SOA, or ACM CNAME records.
+aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+  --change-batch file:///tmp/kubemind-external-dns-records.json
+
 # Re-assume the bootstrap Terraform role and destroy production first.
 export AWS_PROFILE=isaiahAug26 AWS_REGION=eu-west-2
 TF_ROLE=$(terraform -chdir=serving/terraform/bootstrap output -raw terraform_execution_role_arn)
