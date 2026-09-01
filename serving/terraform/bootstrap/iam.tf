@@ -253,7 +253,9 @@ data "aws_iam_policy_document" "terraform_execution" {
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/tech-test-ebs-csi-driver",
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-ecr-promotion",
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-cluster-validation",
-      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-secrets"
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-secrets",
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-cert-manager",
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-dns"
     ]
   }
 
@@ -382,6 +384,68 @@ data "aws_iam_policy_document" "terraform_execution" {
       test     = "StringEquals"
       variable = "iam:PassedToService"
       values   = ["pods.eks.amazonaws.com"]
+    }
+  }
+
+  # cert-manager and ExternalDNS receive narrowly scoped Route 53 access via
+  # EKS Pod Identity, so the Terraform role must be able to associate them.
+  statement {
+    sid     = "PassDnsControllerRolesToEksPods"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+
+    resources = [
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-cert-manager",
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-dns"
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["pods.eks.amazonaws.com"]
+    }
+  }
+
+  # The optional DNS module creates the zone, ACM certificate, and validation
+  # record. These permissions are also required to read and destroy that same
+  # infrastructure during a production teardown.
+  statement {
+    sid    = "ManageProductionRoute53"
+    effect = "Allow"
+    actions = [
+      "route53:ChangeResourceRecordSets",
+      "route53:ChangeTagsForResource",
+      "route53:CreateHostedZone",
+      "route53:DeleteHostedZone",
+      "route53:GetChange",
+      "route53:GetHostedZone",
+      "route53:ListHostedZones",
+      "route53:ListHostedZonesByName",
+      "route53:ListResourceRecordSets",
+      "route53:ListTagsForResource"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ManageProductionAcm"
+    effect = "Allow"
+    actions = [
+      "acm:AddTagsToCertificate",
+      "acm:DeleteCertificate",
+      "acm:DescribeCertificate",
+      "acm:ListTagsForCertificate",
+      "acm:RemoveTagsFromCertificate",
+      "acm:RequestCertificate"
+    ]
+
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [var.aws_region]
     }
   }
 
