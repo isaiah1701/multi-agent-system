@@ -243,9 +243,12 @@ resource "aws_iam_role" "langfuse_email" {
 
 data "aws_iam_policy_document" "langfuse_email" {
   statement {
-    sid     = "SendLangfuseTransactionalEmail"
-    effect  = "Allow"
-    actions = ["ses:SendEmail"]
+    sid    = "SendLangfuseTransactionalEmail"
+    effect = "Allow"
+    actions = [
+      "ses:SendEmail",
+      "ses:SendRawEmail",
+    ]
     resources = [
       local.langfuse_email_identity_arn,
     ]
