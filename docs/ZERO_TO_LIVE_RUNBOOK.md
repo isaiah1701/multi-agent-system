@@ -8,8 +8,8 @@ The completed platform contains:
 
 - Bootstrap Terraform: an S3 Terraform backend, a Terraform execution role, and the `kubemind/prod/runtime` AWS Secrets Manager secret.
 - Production Terraform: VPC, EKS, managed nodes, ECR repositories, scoped Pod Identity roles, Route 53 hosted zone, ACM certificate, and ECR/GitHub roles.
-- Helmfile: External Secrets, Argo CD, AWS Load Balancer Controller, cert-manager, and ExternalDNS.
-- Argo CD: Langfuse and KubeMind services from `serving/helm`, including automatic Chroma corpus ingestion on retriever rollout.
+- Helmfile: Argo CD and the AWS Load Balancer Controller.
+- Argo CD: External Secrets, cert-manager, ExternalDNS, Langfuse, and KubeMind services from `serving/helm`, including automatic Chroma corpus ingestion on retriever rollout.
 - Route 53/ALB: `5hort.site` is an ExternalDNS alias to the public ALB; the AWS Load Balancer Controller discovers the ACM certificate and serves HTTPS once ACM is issued.
 
 Current target account and region are `522565516627` and `eu-west-2`; the expected operator identity is `arn:aws:iam::522565516627:user/isaiah` via profile `isaiahAug26`. Change all account-, region-, domain-, repository-, and network-specific values deliberately when rebuilding elsewhere.
@@ -128,7 +128,7 @@ Update the four `images.*.tag` values in `serving/helm/values/production.yaml` t
 
 ## 5. Configure kubectl and install the EKS control plane add-ons
 
-Return to the operator profile, configure the cluster, and run Helmfile. Helmfile installs External Secrets, Argo CD, the AWS Load Balancer Controller, cert-manager, and ExternalDNS. The bootstrap chart then creates Argo applications for Langfuse and KubeMind.
+Return to the operator profile, configure the cluster, and run Helmfile. Helmfile installs Argo CD and the AWS Load Balancer Controller. The bootstrap chart then creates Argo applications for External Secrets, cert-manager, ExternalDNS, Langfuse runtime secrets, Langfuse, and KubeMind.
 
 ```bash
 export AWS_PROFILE=isaiahAug26 AWS_REGION=eu-west-2
@@ -136,15 +136,20 @@ CLUSTER_NAME=$(terraform -chdir=serving/terraform/environments/prod output -raw 
 aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION" --profile "$AWS_PROFILE"
 
 helmfile -f helmfile.yaml sync
+kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/external-secrets --timeout=10m
+kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/cert-manager --timeout=10m
+kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/external-dns --timeout=10m
 kubectl -n external-secrets rollout status deployment/external-secrets --timeout=5m
 kubectl -n cert-manager rollout status deployment/cert-manager --timeout=5m
 kubectl -n external-dns rollout status deployment/external-dns --timeout=5m
+kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced \
+  application/langfuse-runtime-secret --timeout=10m
 kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced \
   application/kubemind-agent-services --timeout=10m
 kubectl -n kubemind wait --for=condition=Ready externalsecret/kubemind-runtime --timeout=10m
 ```
 
-`helmfile.yaml` uses domain filter `5hort.site`, an AWS Route 53 ExternalDNS registry, and the cert-manager/external-dns Pod Identity service accounts created by production Terraform. The KubeMind ingress has HTTP 80 and HTTPS 443 listeners, SSL redirect, certificate discovery, and the ExternalDNS hostname annotation.
+The Argo CD ExternalDNS application uses domain filter `5hort.site`, an AWS Route 53 ExternalDNS registry, and the cert-manager/external-dns Pod Identity service accounts created by production Terraform. The KubeMind ingress has HTTP 80 and HTTPS 443 listeners, SSL redirect, certificate discovery, and the ExternalDNS hostname annotation.
 
 ## 6. Corpus ingestion and rollout checks
 
@@ -204,15 +209,17 @@ If another AI is asked to perform this recovery, give it this contract:
 
 ## Controlled teardown (this is destructive)
 
-To return to no infrastructure managed by these stacks, destroy in this order: Argo applications/workloads, Helmfile controller releases, production Terraform, then bootstrap Terraform. This deletes the ALB, EKS cluster/nodes/VPC, Route 53 hosted zone and DNS records, ACM certificate, ECR repositories and images, state bucket, and runtime secret. Removing the Route 53 zone does **not** revert GoDaddy's nameservers; set them back at GoDaddy separately if desired.
+To return to no infrastructure managed by these stacks, destroy in this order: Argo applications/workloads, Helmfile bootstrap releases, production Terraform, then bootstrap Terraform. This deletes the ALB, EKS cluster/nodes/VPC, Route 53 hosted zone and DNS records, ACM certificate, ECR repositories and images, state bucket, and runtime secret. Removing the Route 53 zone does **not** revert GoDaddy's nameservers; set them back at GoDaddy separately if desired.
 
 Use the commands only after confirming no resources should be retained:
 
 ```bash
-# Delete Argo-managed workloads while the EKS API is still available.
-kubectl -n argocd delete application kubemind-agent-services langfuse --ignore-not-found --wait=true
+# Delete Argo-managed platform and workload applications while the EKS API is
+# still available.
+kubectl -n argocd delete application external-secrets cert-manager external-dns \
+  langfuse-runtime-secret langfuse kubemind-agent-services --ignore-not-found --wait=true
 
-# Remove Helmfile-owned controllers and their Kubernetes resources.
+# Remove Helmfile-owned bootstrap releases and their Kubernetes resources.
 helmfile -f helmfile.yaml destroy
 
 # ExternalDNS aliases are outside Terraform state. Inspect and delete only the

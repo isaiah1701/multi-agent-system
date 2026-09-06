@@ -1,26 +1,108 @@
 {{- if .Values.bootstrap.enabled }}
 {{- $repoURL := required "git.repoURL is required" .Values.git.repoURL }}
+{{- $controllerApplications := .Values.controllerApplications | default (list) }}
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
   name: {{ .Values.project.name }}
   namespace: {{ .Release.Namespace }}
 spec:
-  description: KubeMind services managed through Argo CD.
+  description: KubeMind platform controllers and services managed through Argo CD.
   sourceRepos:
     - {{ $repoURL }}
     - {{ .Values.langfuse.chartRepo }}
+    {{- range $controller := $controllerApplications }}
+    - {{ $controller.chartRepo }}
+    {{- end }}
   destinations:
     - namespace: {{ .Values.agentServices.namespace }}
       server: {{ .Values.destination.server }}
     - namespace: {{ .Values.langfuse.namespace }}
       server: {{ .Values.destination.server }}
+    {{- range $controller := $controllerApplications }}
+    - namespace: {{ $controller.namespace }}
+      server: {{ $.Values.destination.server }}
+    {{- end }}
   clusterResourceWhitelist:
     - group: "*"
       kind: "*"
   namespaceResourceWhitelist:
     - group: "*"
       kind: "*"
+{{- range $controller := $controllerApplications }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $controller.name }}
+  namespace: {{ $.Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $controller.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ $.Values.project.name }}
+  source:
+    repoURL: {{ $controller.chartRepo }}
+    chart: {{ $controller.chart }}
+    targetRevision: {{ $controller.chartVersion | quote }}
+    helm:
+      releaseName: {{ $controller.name }}
+      valuesObject:
+        {{- toYaml $controller.values | nindent 8 }}
+  destination:
+    server: {{ $.Values.destination.server }}
+    namespace: {{ $controller.namespace }}
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    {{- if $.Values.syncPolicy.automated }}
+    automated:
+      prune: {{ $.Values.syncPolicy.prune }}
+      selfHeal: {{ $.Values.syncPolicy.selfHeal }}
+    {{- end }}
+{{- end }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Values.langfuse.runtimeSecretApplicationName }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    # This child application owns the ExternalSecret so Helmfile never applies
+    # an External Secrets custom resource before the ESO application installs
+    # its CRDs.
+    argocd.argoproj.io/sync-wave: {{ .Values.langfuse.runtimeSecretApplicationSyncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.project.name }}
+  source:
+    repoURL: {{ $repoURL }}
+    targetRevision: {{ .Values.git.targetRevision }}
+    path: {{ .Values.agentServices.chartPath }}
+    helm:
+      releaseName: {{ .Values.langfuse.runtimeSecretApplicationName }}
+      valuesObject:
+        bootstrap:
+          enabled: false
+        agentServices:
+          enabled: false
+        langfuseRuntimeSecret:
+          {{- toYaml .Values.langfuseRuntimeSecret | nindent 10 }}
+        langfuse:
+          namespace: {{ .Values.langfuse.namespace }}
+  destination:
+    server: {{ .Values.destination.server }}
+    namespace: {{ .Values.langfuse.namespace }}
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    {{- if .Values.syncPolicy.automated }}
+    automated:
+      prune: {{ .Values.syncPolicy.prune }}
+      selfHeal: {{ .Values.syncPolicy.selfHeal }}
+    {{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application

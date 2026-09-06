@@ -389,6 +389,25 @@ data "aws_iam_policy_document" "terraform_execution" {
     }
   }
 
+  # The AWS Load Balancer Controller also receives its role through EKS Pod
+  # Identity. Its role name is derived from the EKS cluster rather than the
+  # project/environment prefix used by the other controllers.
+  statement {
+    sid     = "PassLoadBalancerControllerRoleToEksPods"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+
+    resources = [
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${var.cluster_name}-aws-load-balancer-controller"
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["pods.eks.amazonaws.com"]
+    }
+  }
+
   # cert-manager and ExternalDNS receive narrowly scoped Route 53 access via
   # EKS Pod Identity, so the Terraform role must be able to associate them.
   statement {

@@ -26,9 +26,57 @@ syncPolicy:
   selfHeal: true
   prune: true
 
+controllerApplications:
+  - name: external-secrets
+    namespace: external-secrets
+    chartRepo: https://charts.external-secrets.io
+    chart: external-secrets
+    chartVersion: 2.10.0
+    syncWave: "-4"
+    values:
+      installCRDs: true
+      serviceAccount:
+        create: true
+        # This exact service account is bound to the EKS Pod Identity
+        # association created by the production Terraform configuration.
+        name: external-secrets
+  - name: cert-manager
+    namespace: cert-manager
+    chartRepo: https://charts.jetstack.io
+    chart: cert-manager
+    chartVersion: v1.21.1
+    syncWave: "-4"
+    values:
+      crds:
+        enabled: true
+        keep: true
+      serviceAccount:
+        create: true
+        name: cert-manager
+  - name: external-dns
+    namespace: external-dns
+    chartRepo: https://kubernetes-sigs.github.io/external-dns/
+    chart: external-dns
+    chartVersion: 1.21.1
+    syncWave: "-3"
+    values:
+      provider:
+        name: aws
+      sources:
+        - ingress
+      policy: sync
+      registry: txt
+      txtOwnerId: kubemind-prod-cluster
+      domainFilters:
+        - 5hort.site
+      serviceAccount:
+        create: true
+        name: external-dns
+
 # This secret is generated directly in AWS Secrets Manager during bootstrap.
 # ESO is the only component that materializes it in the Langfuse namespace.
 langfuseRuntimeSecret:
+  enabled: true
   name: langfuse-runtime
   externalSecret:
     refreshInterval: 1h
@@ -39,6 +87,8 @@ langfuseRuntimeSecret:
 
 langfuse:
   name: langfuse
+  runtimeSecretApplicationName: langfuse-runtime-secret
+  runtimeSecretApplicationSyncWave: "-2"
   namespace: langfuse
   chartRepo: https://langfuse.github.io/langfuse-k8s
   chart: langfuse

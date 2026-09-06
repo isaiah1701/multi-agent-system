@@ -3,12 +3,6 @@ repositories:
     url: https://argoproj.github.io/argo-helm
   - name: eks
     url: https://aws.github.io/eks-charts
-  - name: external-secrets
-    url: https://charts.external-secrets.io
-  - name: jetstack
-    url: https://charts.jetstack.io
-  - name: external-dns
-    url: https://kubernetes-sigs.github.io/external-dns/
 
 helmDefaults:
   atomic: true
@@ -17,22 +11,9 @@ helmDefaults:
   wait: true
 
 releases:
-  # Helmfile installs cluster-level controllers first. Argo CD then reconciles
-  # the namespace-level Langfuse and KubeMind applications.
-  - name: external-secrets
-    namespace: external-secrets
-    chart: external-secrets/external-secrets
-    version: 2.10.0
-    labels:
-      app: external-secrets
-    values:
-      - installCRDs: true
-        serviceAccount:
-          create: true
-          # This exact service account is bound to the EKS Pod Identity
-          # association created by the production Terraform configuration.
-          name: external-secrets
-
+  # Helmfile owns only the bootstrap control plane. The bootstrap chart creates
+  # Argo CD Applications for ESO, cert-manager, ExternalDNS, Langfuse, and
+  # KubeMind so Argo CD owns their reconciliation after this initial install.
   - name: argocd
     namespace: argocd
     chart: argo/argo-cd
@@ -56,51 +37,12 @@ releases:
           create: true
           name: aws-load-balancer-controller
 
-  - name: cert-manager
-    namespace: cert-manager
-    chart: jetstack/cert-manager
-    version: v1.21.1
-    labels:
-      app: cert-manager
-    values:
-      - crds:
-          enabled: true
-          keep: true
-        serviceAccount:
-          create: true
-          name: cert-manager
-
-  - name: external-dns
-    namespace: external-dns
-    chart: external-dns/external-dns
-    version: 1.21.1
-    needs:
-      - cert-manager/cert-manager
-    labels:
-      app: external-dns
-    values:
-      - provider:
-          name: aws
-        sources:
-          - ingress
-        policy: sync
-        registry: txt
-        txtOwnerId: kubemind-prod-cluster
-        domainFilters:
-          - 5hort.site
-        serviceAccount:
-          create: true
-          name: external-dns
-
   - name: kubemind-bootstrap
     namespace: argocd
     chart: ./serving/helm
     needs:
-      - external-secrets/external-secrets
       - argocd/argocd
       - kube-system/aws-load-balancer-controller
-      - cert-manager/cert-manager
-      - external-dns/external-dns
     labels:
       app: kubemind-bootstrap
     values:

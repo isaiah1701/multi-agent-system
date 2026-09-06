@@ -3,7 +3,7 @@
 resource "aws_secretsmanager_secret" "kubemind_runtime" {
   name                    = var.runtime_secret_name
   description             = "KubeMind runtime credentials consumed by External Secrets Operator"
-  recovery_window_in_days = 7
+  recovery_window_in_days = 0
 
   tags = local.tags
 }

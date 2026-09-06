@@ -111,13 +111,21 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 export AWS_PROFILE="$deployment_profile"
 aws eks update-kubeconfig --name "$cluster_name" --region "$AWS_REGION" --profile "$deployment_profile"
 
-printf 'Installing ESO, Argo CD, and Argo applications...\n'
+printf 'Installing the bootstrap control plane and Argo CD applications...\n'
 # `sync` directly invokes `helm upgrade`, so it remains compatible with Helm 4
 # as well as Helm 3 installations that do not have the Helm diff plugin.
 helmfile -f "$repo_root/helmfile.yaml" sync
 
-printf 'Waiting for ESO and the runtime Secret...\n'
+printf 'Waiting for Argo CD to reconcile the platform controllers...\n'
+for application in external-secrets cert-manager external-dns; do
+  kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced "application/$application" --timeout=10m
+done
 kubectl -n external-secrets rollout status deployment/external-secrets --timeout=5m
+kubectl -n cert-manager rollout status deployment/cert-manager --timeout=5m
+kubectl -n external-dns rollout status deployment/external-dns --timeout=5m
+
+printf 'Waiting for ESO-managed runtime Secrets...\n'
+kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/langfuse-runtime-secret --timeout=10m
 kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/kubemind-agent-services --timeout=10m
 kubectl -n kubemind wait --for=condition=Ready externalsecret/kubemind-runtime --timeout=10m
 
