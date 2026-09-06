@@ -12,6 +12,12 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "2"
 spec:
+  {{- if eq $name "retriever" }}
+  # Both corpus volumes are EBS ReadWriteOnce claims. Recreate prevents a
+  # rolling replacement from deadlocking on a cross-node multi-attach.
+  strategy:
+    type: Recreate
+  {{- end }}
   replicas: {{ $service.replicaCount }}
   selector:
     matchLabels:
