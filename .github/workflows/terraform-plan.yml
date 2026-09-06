@@ -81,4 +81,4 @@ jobs:
         working-directory: serving/terraform/environments/prod
         run: |
           terraform init -backend=false -input=false
-          terraform plan -input=false -lock=false -no-color
+          terraform plan -input=false -lock=false -no-color -var-file=prod.tfvars

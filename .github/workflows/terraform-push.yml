@@ -86,4 +86,4 @@ jobs:
             -backend-config="use_lockfile=true"
       - name: Apply the reviewed configuration
         working-directory: serving/terraform/environments/prod
-        run: terraform apply -input=false -auto-approve
+        run: terraform apply -input=false -auto-approve -var-file=prod.tfvars
