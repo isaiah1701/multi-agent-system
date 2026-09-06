@@ -25,10 +25,13 @@ variable "create_github_oidc_provider" {
   default     = true
 }
 
-variable "github_oidc_thumbprint" {
-  description = "GitHub Actions OIDC root CA thumbprint required by AWS IAM."
-  type        = string
-  default     = "6938fd4d98bab03faadb97b34396831e3780aea1"
+variable "github_oidc_thumbprints" {
+  description = "GitHub Actions OIDC root CA thumbprints accepted by AWS IAM during certificate-chain rotation."
+  type        = list(string)
+  default = [
+    "6938fd4d98bab03faadb97b34396831e3780aea1",
+    "ab9d0263244dd0326eb67015705a667e79cfe998",
+  ]
 }
 
 variable "tags" {

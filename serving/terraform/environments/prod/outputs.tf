@@ -50,10 +50,10 @@ output "acm_certificate_arn" {
 
 output "langfuse_ses_identity_arn" {
   description = "SES domain identity used for Langfuse transactional email."
-  value       = try(aws_sesv2_email_identity.langfuse[0].arn, null)
+  value       = module.langfuse_ses.identity_arn
 }
 
 output "langfuse_email_role_arn" {
   description = "EKS Pod Identity role used by Langfuse to send transactional email."
-  value       = aws_iam_role.langfuse_email.arn
+  value       = module.langfuse_ses.email_role_arn
 }

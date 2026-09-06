@@ -45,8 +45,8 @@ class LLMClientRetryTests(unittest.TestCase):
         self.assertEqual(request["tools"][-1]["cache_control"], {"type": "ephemeral"})
         telemetry.assert_any_call(
             usage_details={
-                "input_tokens": 100,
-                "output_tokens": 10,
+                "input": 100,
+                "output": 10,
                 "cache_creation_input_tokens": 90,
                 "cache_read_input_tokens": 0,
             }

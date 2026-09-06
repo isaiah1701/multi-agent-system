@@ -35,9 +35,6 @@ locals {
 
   github_oidc_provider_arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
   dns_enabled              = var.domain_name != null && trimspace(var.domain_name) != ""
-  langfuse_email_identity_arn = local.dns_enabled ? (
-    "arn:${data.aws_partition.current.partition}:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.domain_name}"
-  ) : "arn:${data.aws_partition.current.partition}:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/disabled.invalid"
   dns_controller_subjects = local.dns_enabled ? {
     external_dns = {
       namespace       = "external-dns"
@@ -186,86 +183,44 @@ module "route53" {
   wait_for_validation = var.wait_for_acm_validation
 }
 
-# Langfuse uses SES for password resets, invitations, and other transactional
-# email. Easy DKIM verifies the whole hosted domain without storing SMTP
-# credentials in Kubernetes.
-resource "aws_sesv2_email_identity" "langfuse" {
-  count = local.dns_enabled ? 1 : 0
+module "langfuse_ses" {
+  source = "../../modules/ses"
 
-  email_identity = var.domain_name
+  enabled                    = local.dns_enabled
+  aws_region                 = var.aws_region
+  domain_name                = var.domain_name
+  hosted_zone_id             = local.dns_enabled ? module.route53[0].zone_id : null
+  cluster_name               = module.eks.cluster_name
+  kubernetes_namespace       = "langfuse"
+  kubernetes_service_account = "langfuse"
+  role_name                  = "${var.project_name}-${var.environment}-langfuse-email"
+  workload_name              = "langfuse"
+  tags                       = local.tags
 }
 
-resource "aws_route53_record" "langfuse_ses_dkim" {
-  count = local.dns_enabled ? 3 : 0
-
-  zone_id = module.route53[0].zone_id
-  name    = "${aws_sesv2_email_identity.langfuse[0].dkim_signing_attributes[0].tokens[count.index]}._domainkey.${var.domain_name}"
-  type    = "CNAME"
-  ttl     = 300
-  records = ["${aws_sesv2_email_identity.langfuse[0].dkim_signing_attributes[0].tokens[count.index]}.dkim.amazonses.com"]
+moved {
+  from = aws_sesv2_email_identity.langfuse
+  to   = module.langfuse_ses.aws_sesv2_email_identity.this
 }
 
-data "aws_iam_policy_document" "langfuse_email_assume_role" {
-  statement {
-    effect = "Allow"
-
-    actions = [
-      "sts:AssumeRole",
-      "sts:TagSession",
-    ]
-
-    principals {
-      type        = "Service"
-      identifiers = ["pods.eks.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:RequestTag/kubernetes-namespace"
-      values   = ["langfuse"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:RequestTag/kubernetes-service-account"
-      values   = ["langfuse"]
-    }
-  }
+moved {
+  from = aws_route53_record.langfuse_ses_dkim
+  to   = module.langfuse_ses.aws_route53_record.dkim
 }
 
-resource "aws_iam_role" "langfuse_email" {
-  name               = "${var.project_name}-${var.environment}-langfuse-email"
-  description        = "Allows Langfuse to send transactional email through SES"
-  assume_role_policy = data.aws_iam_policy_document.langfuse_email_assume_role.json
-
-  tags = local.tags
+moved {
+  from = aws_iam_role.langfuse_email
+  to   = module.langfuse_ses.aws_iam_role.this
 }
 
-data "aws_iam_policy_document" "langfuse_email" {
-  statement {
-    sid    = "SendLangfuseTransactionalEmail"
-    effect = "Allow"
-    actions = [
-      "ses:SendEmail",
-      "ses:SendRawEmail",
-    ]
-    resources = [
-      local.langfuse_email_identity_arn,
-    ]
-  }
+moved {
+  from = aws_iam_role_policy.langfuse_email
+  to   = module.langfuse_ses.aws_iam_role_policy.send_email
 }
 
-resource "aws_iam_role_policy" "langfuse_email" {
-  name   = "send-langfuse-transactional-email"
-  role   = aws_iam_role.langfuse_email.id
-  policy = data.aws_iam_policy_document.langfuse_email.json
-}
-
-resource "aws_eks_pod_identity_association" "langfuse_email" {
-  cluster_name    = module.eks.cluster_name
-  namespace       = "langfuse"
-  service_account = "langfuse"
-  role_arn        = aws_iam_role.langfuse_email.arn
+moved {
+  from = aws_eks_pod_identity_association.langfuse_email
+  to   = module.langfuse_ses.aws_eks_pod_identity_association.this
 }
 
 data "aws_iam_policy_document" "dns_controller_assume_role" {

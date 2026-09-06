@@ -69,8 +69,10 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LANGFUSE_PUBLIC_KEY: ""
-          LANGFUSE_SECRET_KEY: ""
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_EVAL_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_EVAL_SECRET_KEY }}
+          LANGFUSE_BASE_URL: https://langfuse.5hort.site
+          LANGFUSE_TRACING_ENVIRONMENT: ci
         run: python -m eval.evaluate
       - name: Enforce golden-set scoring thresholds
         run: python scripts/check_golden_set.py --summary eval/summary.json

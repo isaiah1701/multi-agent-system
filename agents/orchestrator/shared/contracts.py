@@ -41,6 +41,7 @@ class RetrievalRequest(BaseModel):
 
     question: str = Field(min_length=1, max_length=MAX_QUESTION_LENGTH)
     history: list[ConversationMessage] = Field(default_factory=list, max_length=MAX_HISTORY_MESSAGES)
+    request_id: str | None = Field(default=None, min_length=1, max_length=128)
 
     @field_validator("question")
     @classmethod
@@ -85,6 +86,7 @@ class OrchestrationRequest(BaseModel):
 
     question: str = Field(min_length=1, max_length=MAX_QUESTION_LENGTH)
     thread_id: str | None = Field(default=None, max_length=128)
+    request_id: str | None = Field(default=None, min_length=1, max_length=128)
 
     @field_validator("question")
     @classmethod
@@ -109,6 +111,7 @@ class OrchestrationResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     answer: str
+    request_id: str
     is_relevant: bool = True
     sources: list[dict[str, Any]] = Field(default_factory=list)
 

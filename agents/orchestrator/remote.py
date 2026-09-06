@@ -85,6 +85,11 @@ def _question(state: "AgentState") -> str:
     return question.strip()
 
 
+def _request_id(state: "AgentState") -> str | None:
+    request_id = state.get("request_id")
+    return request_id.strip() if isinstance(request_id, str) and request_id.strip() else None
+
+
 async def _post(url: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=_timeout()) as client:
@@ -103,7 +108,11 @@ async def retrieve_and_context_remote(state: "AgentState") -> dict[str, object]:
     response = await _post(
         os.environ[RETRIEVER_AGENT_URL_ENV],
         "/v1/retrieve",
-        {"question": _question(state), "history": history_for_transport(state)},
+        {
+            "question": _question(state),
+            "history": history_for_transport(state),
+            "request_id": _request_id(state),
+        },
     )
     tool_results, context, sources = response.get("tool_results"), response.get("context"), response.get("sources")
     if not isinstance(tool_results, list) or not isinstance(context, str) or not isinstance(sources, list):
@@ -125,6 +134,7 @@ async def answer_remote(
         "/v1/answer",
         {
             "question": _question(state),
+            "request_id": _request_id(state),
             "history": history_for_transport(state),
             "tool_results": tool_results,
             "context": context,

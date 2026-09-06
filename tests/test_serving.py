@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import httpx
 
@@ -59,10 +59,13 @@ class ServingTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
+        request_id = response.json()["request_id"]
+        self.assertEqual(response.headers["x-request-id"], request_id)
         self.assertEqual(
             response.json(),
             {
                 "answer": "A PDB protects voluntary disruptions. [1]",
+                "request_id": request_id,
                 "is_relevant": True,
                 "sources": [
                     {
@@ -76,7 +79,9 @@ class ServingTests(unittest.TestCase):
                 ],
             },
         )
-        invoke.assert_awaited_once_with("What is a PDB?", thread_id="browser-session-1")
+        invoke.assert_awaited_once_with(
+            "What is a PDB?", thread_id="browser-session-1", request_id=request_id
+        )
 
     def test_ask_returns_a_scope_guardrail_rejection_as_a_valid_response(self) -> None:
         guardrail_answer = "I can only answer Kubernetes and related platform infrastructure questions."
@@ -91,20 +96,32 @@ class ServingTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"answer": guardrail_answer, "is_relevant": False, "sources": []})
-        invoke.assert_awaited_once_with("What is the capital of France?", thread_id="browser-session-1")
+        request_id = response.json()["request_id"]
+        self.assertEqual(
+            response.json(),
+            {"answer": guardrail_answer, "request_id": request_id, "is_relevant": False, "sources": []},
+        )
+        invoke.assert_awaited_once_with(
+            "What is the capital of France?", thread_id="browser-session-1", request_id=request_id
+        )
 
     def test_ask_accepts_a_missing_thread_id(self) -> None:
         with patch("serving.app.api.invoke", new=AsyncMock(return_value={"answer": "An answer."})) as invoke:
             response = self._request("POST", "/ask", json={"question": "Explain HPA"})
 
         self.assertEqual(response.status_code, 200)
-        invoke.assert_awaited_once_with("Explain HPA", thread_id=None)
+        invoke.assert_awaited_once_with("Explain HPA", thread_id=None, request_id=ANY)
 
     def test_ask_stream_emits_guarded_answer_events(self) -> None:
-        async def invoke_with_stream(question: str, *, thread_id: str | None = None) -> dict[str, str]:
+        async def invoke_with_stream(
+            question: str,
+            *,
+            thread_id: str | None = None,
+            request_id: str,
+        ) -> dict[str, str]:
             self.assertEqual(question, "What is a PDB?")
             self.assertEqual(thread_id, "browser-session-1")
+            self.assertTrue(request_id)
             return {
                 "answer": "A PDB protects voluntary disruptions. [1]",
                 "sources": [
@@ -128,7 +145,7 @@ class ServingTests(unittest.TestCase):
         self.assertTrue(response.headers["content-type"].startswith("text/event-stream"))
         self.assertIn('event: replace\ndata: {"answer": "A PDB protects voluntary disruptions. [1]"}', response.text)
         self.assertIn('event: sources\ndata: {"sources": [{"id": "1", "type": "kubernetes_docs"', response.text)
-        self.assertIn('event: done\ndata: {}', response.text)
+        self.assertIn('event: done\ndata: {"request_id": "', response.text)
 
     def test_ask_stream_sends_a_scope_guardrail_rejection_to_the_browser(self) -> None:
         guardrail_answer = "I can only answer Kubernetes and related platform infrastructure questions."
@@ -144,9 +161,11 @@ class ServingTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(f'event: replace\ndata: {{"answer": "{guardrail_answer}"}}', response.text)
-        self.assertIn('event: done\ndata: {}', response.text)
+        self.assertIn('event: done\ndata: {"request_id": "', response.text)
         self.assertNotIn('event: error', response.text)
-        invoke.assert_awaited_once_with("What is the capital of France?", thread_id="browser-session-1")
+        invoke.assert_awaited_once_with(
+            "What is the capital of France?", thread_id="browser-session-1", request_id=ANY
+        )
 
     def test_ask_rejects_empty_and_whitespace_questions(self) -> None:
         for question in ("", "   "):

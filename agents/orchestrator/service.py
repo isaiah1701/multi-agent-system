@@ -27,7 +27,7 @@ async def health() -> dict[str, str]:
 async def ask(request: OrchestrationRequest) -> OrchestrationResponse:
     """Run one guarded workflow turn for the frontend service."""
     try:
-        result = await invoke(request.question, thread_id=request.thread_id)
+        result = await invoke(request.question, thread_id=request.thread_id, request_id=request.request_id)
     except Exception:
         raise _internal_error() from None
 
@@ -40,6 +40,7 @@ async def ask(request: OrchestrationRequest) -> OrchestrationResponse:
         raise _internal_error()
     return OrchestrationResponse(
         answer=answer,
+        request_id=str(result["request_id"]),
         is_relevant=is_relevant if isinstance(is_relevant, bool) else True,
         sources=[dict(source) for source in sources],
     )

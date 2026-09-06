@@ -117,6 +117,7 @@ async def use_tools(state: "AgentState") -> dict[str, list[dict[str, Any]]]:
                 system=TOOL_AGENT_SYSTEM_PROMPT,
                 messages=messages,
                 max_tokens=CONTEXT_MAX_TOKENS,
+                observation_name="tool-selection",
                 tools=[*TOOL_SCHEMAS, PLATFORM_REFERENCE_SEARCH_TOOL],
             )
         except (LLMClientError, ValueError) as error:
@@ -223,6 +224,7 @@ async def add_context(state: "AgentState") -> dict[str, object]:
             system=CONTEXT_SYSTEM_PROMPT,
             prompt=prompt,
             max_tokens=CONTEXT_MAX_TOKENS,
+            observation_name="evidence-briefing",
         )
     except (LLMClientError, ValueError) as error:
         raise RuntimeError("Context generation failed") from error

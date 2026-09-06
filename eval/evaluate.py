@@ -11,11 +11,18 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from agents.orchestrator.orchestrator import invoke
 from agents.orchestrator.llm.client import create_message
 from agents.orchestrator.llm.config import JUDGE_MAX_TOKENS, JUDGE_MODEL
-from serving.app.langfuse import flush_traces, observe, update_current_span
+from serving.app.langfuse import (
+    flush_traces,
+    request_trace,
+    score_current_trace,
+    update_current_span,
+    update_trace_span,
+)
 
 
 EVAL_DIRECTORY = Path(__file__).resolve().parent
@@ -170,6 +177,7 @@ async def judge_answer(
         system=JUDGE_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": "\n\n".join(prompt_parts)}],
         max_tokens=JUDGE_MAX_TOKENS,
+        observation_name="llm-as-judge",
         temperature=0.0,
     )
     return _validated_scores(_response_text(response))
@@ -202,8 +210,7 @@ def _timing(started_at: float, *, application_ms: int | None = None, judge_ms: i
     return timing
 
 
-@observe(name="golden-set-evaluation-case", as_type="chain", capture_input=False, capture_output=False)
-def evaluate_case(case: Mapping[str, Any]) -> dict[str, Any]:
+def _evaluate_case(case: Mapping[str, Any], request_id: str) -> dict[str, Any]:
     """Run the production path once, then judge its usable final answer once."""
     started_at = time.perf_counter()
     load_error = case.get("_load_error")
@@ -221,7 +228,7 @@ def evaluate_case(case: Mapping[str, Any]) -> dict[str, Any]:
 
     application_started_at = time.perf_counter()
     try:
-        state = asyncio.run(invoke(question))
+        state = asyncio.run(invoke(question, request_id=request_id))
     except Exception as error:
         result = _case_error(
             case,
@@ -316,6 +323,26 @@ def evaluate_case(case: Mapping[str, Any]) -> dict[str, Any]:
     }
     update_current_span(output={"status": "scored", "scores": scores, "timing_ms": result["timing_ms"]})
     return result
+
+
+def evaluate_case(case: Mapping[str, Any]) -> dict[str, Any]:
+    """Evaluate one case as a correlated trace with judge scores and cost."""
+    case_id = str(case.get("id") or f"line-{case.get('_line', 'unknown')}")
+    request_id = f"eval-{case_id}-{uuid4().hex}"
+    with request_trace(
+        request_id,
+        name="golden-set-evaluation-case",
+        component="eval",
+        input={"case_id": case_id, "question": case.get("question")},
+        tags=["eval", "llm-as-judge", str(case.get("category") or "uncategorized")],
+    ) as trace:
+        result = _evaluate_case(case, request_id)
+        update_trace_span(trace, output=result, metadata={"request_id": request_id, "case_id": case_id})
+        for metric in METRICS:
+            value = result.get(metric)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                score_current_trace(metric, float(value), metadata={"case_id": case_id})
+        return result
 
 
 def _summary(results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:

@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+from serving.app.langfuse import flush_traces, observe, update_current_span
+
 try:  # Supports both `python -m ingestion.ingest` and direct script execution.
     from ingestion.chunk import (
         DEFAULT_CORPUS_PATH,
@@ -192,6 +194,18 @@ def _upsert_embedded_chunks(
     return stored
 
 
+def _record_ingestion_trace(config: IngestionConfig, result: IngestionResult) -> None:
+    update_current_span(
+        input={
+            "corpus_path": str(config.corpus_path),
+            "collection": config.collection_name,
+        },
+        output=result.to_dict(),
+        metadata={"embedding_model": config.embedding_model_name},
+    )
+
+
+@observe(name="corpus-ingestion", as_type="chain", capture_input=False, capture_output=False)
 def ingest_corpus(config: IngestionConfig) -> IngestionResult:
     """Chunk, embed, and persist the Kubernetes corpus with safe re-runs.
 
@@ -221,6 +235,7 @@ def ingest_corpus(config: IngestionConfig) -> IngestionResult:
     if not chunking_result.chunks:
         result.elapsed_seconds = time.perf_counter() - started_at
         LOGGER.warning("No chunks were generated; vector store was not modified")
+        _record_ingestion_trace(config, result)
         return result
 
     embedded_chunks, failed_embedding_documents, embedding_failures = _embed_chunks(
@@ -233,6 +248,7 @@ def ingest_corpus(config: IngestionConfig) -> IngestionResult:
     if not embedded_chunks:
         result.elapsed_seconds = time.perf_counter() - started_at
         LOGGER.warning("No chunks were embedded; vector store was not modified")
+        _record_ingestion_trace(config, result)
         return result
 
     collection = _get_collection(config.database_path, config.collection_name)
@@ -257,6 +273,7 @@ def ingest_corpus(config: IngestionConfig) -> IngestionResult:
         result.chunks_stored,
         result.collection_records,
     )
+    _record_ingestion_trace(config, result)
     return result
 
 
@@ -305,9 +322,12 @@ def main() -> int:
         semantic_breakpoint_percentile=args.semantic_breakpoint_percentile,
         document_limit=args.limit,
     )
-    result = ingest_corpus(config)
-    print(json.dumps(result.to_dict(), indent=2))
-    return 0 if not result.failures else 1
+    try:
+        result = ingest_corpus(config)
+        print(json.dumps(result.to_dict(), indent=2))
+        return 0 if not result.failures else 1
+    finally:
+        flush_traces()
 
 
 if __name__ == "__main__":

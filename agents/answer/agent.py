@@ -172,6 +172,7 @@ async def _backup_output_review(*, question: str, answer: str, context: str) -> 
             system=OUTPUT_GUARD_JUDGE_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=OUTPUT_GUARD_JUDGE_MAX_TOKENS,
+            observation_name="output-guard-judge",
             temperature=0.0,
         )
     except (LLMClientError, ValueError):
@@ -286,6 +287,7 @@ async def answer(state: "AgentState", config: RunnableConfig | None = None) -> d
             system=build_answer_system_prompt(budget),
             prompt=prompt,
             max_tokens=budget.max_tokens,
+            observation_name="grounded-answer-generation",
             # Buffer model output until it passes the output guardrail. Raw
             # provider fragments are released only through the guarded stream.
             on_text=guarded_stream.receive if guarded_stream is not None else None,

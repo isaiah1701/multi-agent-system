@@ -21,7 +21,7 @@ from agents.orchestrator.shared.evidence import source_follow_up_answer
 from agents.orchestrator.llm.client import LLMClientError, create_message
 from agents.orchestrator.llm.config import INPUT_GUARD_JUDGE_MAX_TOKENS, INPUT_GUARD_JUDGE_MODEL
 from guardrails import classify_kubernetes_relevance
-from serving.app.langfuse import flush_traces, observe, update_current_span
+from serving.app.langfuse import flush_traces, observe, request_trace, update_current_span, update_trace_span
 
 
 LOGGER = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ class AgentState(TypedDict, total=False):
     """Explicit data passed through the guarded tool, context, and answer graph."""
 
     question: Required[str]
+    request_id: str
     messages: Annotated[list[BaseMessage], add_messages]
     is_relevant: bool
     is_ambiguous: bool
@@ -81,6 +82,7 @@ async def _is_obviously_out_of_scope(question: str) -> bool:
             system=INPUT_GUARD_JUDGE_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": question[:1_500]}],
             max_tokens=INPUT_GUARD_JUDGE_MAX_TOKENS,
+            observation_name="input-guard-judge",
             temperature=0.0,
         )
     except (LLMClientError, ValueError):
@@ -203,11 +205,11 @@ def build_app(*, checkpointer: Any | None = None) -> Any:
 app = build_app(checkpointer=InMemorySaver())
 
 
-@observe(name="kubernetes-agent-request", as_type="agent", capture_input=False, capture_output=False)
 async def invoke(
     question: str,
     *,
     thread_id: str | None = None,
+    request_id: str | None = None,
     answer_stream_handler: Any | None = None,
     answer_stream_reset_handler: Any | None = None,
 ) -> AgentState:
@@ -215,20 +217,32 @@ async def invoke(
     if not question.strip():
         raise ValueError("A non-empty question is required")
     resolved_thread_id = thread_id.strip() if isinstance(thread_id, str) and thread_id.strip() else f"single-turn-{uuid4().hex}"
-    update_current_span(input={"question": question}, metadata={"thread_id": resolved_thread_id})
-    result = await app.ainvoke(
-        {"question": question, "messages": [HumanMessage(content=question)]},
-        config={
-            "configurable": {
-                "thread_id": resolved_thread_id,
-                "answer_stream_handler": answer_stream_handler,
-                "answer_stream_reset_handler": answer_stream_reset_handler,
-            }
-        },
-    )
-    update_current_span(
-        output={"answer": result.get("answer"), "is_relevant": result.get("is_relevant")}
-    )
+    resolved_request_id = request_id.strip() if isinstance(request_id, str) and request_id.strip() else uuid4().hex
+    with request_trace(
+        resolved_request_id,
+        name="kubemind-agent-request",
+        component="orchestrator",
+        input={"question": question},
+        session_id=resolved_thread_id,
+        tags=["agents", "langgraph", "orchestrator"],
+    ) as trace:
+        result = await app.ainvoke(
+            {"question": question, "request_id": resolved_request_id, "messages": [HumanMessage(content=question)]},
+            config={
+                "configurable": {
+                    "thread_id": resolved_thread_id,
+                    "request_id": resolved_request_id,
+                    "answer_stream_handler": answer_stream_handler,
+                    "answer_stream_reset_handler": answer_stream_reset_handler,
+                }
+            },
+        )
+        result["request_id"] = resolved_request_id
+        update_trace_span(
+            trace,
+            output={"answer": result.get("answer"), "is_relevant": result.get("is_relevant")},
+            metadata={"request_id": resolved_request_id, "thread_id": resolved_thread_id},
+        )
     return result
 
 

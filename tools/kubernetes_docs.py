@@ -6,7 +6,7 @@ from typing import Any
 
 from retrieval import retrieve
 from retrieval.retrieve import RetrievalCandidate
-from serving.app.langfuse import observe
+from serving.app.langfuse import observe, update_current_span
 
 
 def _serialize_candidate(candidate: RetrievalCandidate) -> dict[str, Any]:
@@ -20,7 +20,12 @@ def _serialize_candidate(candidate: RetrievalCandidate) -> dict[str, Any]:
     }
 
 
-@observe(name="kubernetes-document-search", as_type="tool")
+@observe(
+    name="kubernetes-document-search",
+    as_type="retriever",
+    capture_input=False,
+    capture_output=False,
+)
 def search_kubernetes_docs(query: str, k: int = 10) -> dict[str, Any]:
     """Search the persisted Kubernetes corpus through its public hybrid retrieval API."""
     if not isinstance(query, str) or not query.strip():
@@ -28,8 +33,15 @@ def search_kubernetes_docs(query: str, k: int = 10) -> dict[str, Any]:
     if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= 10:
         raise ValueError("k must be an integer between 1 and 10")
 
-    candidates = retrieve(query.strip(), k=k)
-    return {
-        "query": query.strip(),
-        "chunks": [_serialize_candidate(candidate) for candidate in candidates],
-    }
+    normalised_query = query.strip()
+    candidates = retrieve(normalised_query, k=k)
+    chunks = [_serialize_candidate(candidate) for candidate in candidates]
+    update_current_span(
+        input={"query": normalised_query, "limit": k},
+        output={"chunk_count": len(chunks), "chunks": chunks},
+        metadata={
+            "chunk_count": len(chunks),
+            "top_chunk_id": chunks[0]["chunk_id"] if chunks else None,
+        },
+    )
+    return {"query": normalised_query, "chunks": chunks}

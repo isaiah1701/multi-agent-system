@@ -75,6 +75,9 @@ services:
   api:
     replicaCount: 2
     port: 8000
+    langfuse:
+      publicKeySecretKey: LANGFUSE_AGENTS_PUBLIC_KEY
+      secretKeySecretKey: LANGFUSE_AGENTS_SECRET_KEY
     resources:
       requests:
         cpu: 100m
@@ -85,6 +88,9 @@ services:
   orchestrator:
     replicaCount: 1
     port: 8080
+    langfuse:
+      publicKeySecretKey: LANGFUSE_AGENTS_PUBLIC_KEY
+      secretKeySecretKey: LANGFUSE_AGENTS_SECRET_KEY
     resources:
       requests:
         cpu: 100m
@@ -95,6 +101,9 @@ services:
   retriever:
     replicaCount: 1
     port: 8081
+    langfuse:
+      publicKeySecretKey: LANGFUSE_RETRIEVAL_PUBLIC_KEY
+      secretKeySecretKey: LANGFUSE_RETRIEVAL_SECRET_KEY
     resources:
       requests:
         cpu: 500m
@@ -105,6 +114,9 @@ services:
   answer:
     replicaCount: 2
     port: 8082
+    langfuse:
+      publicKeySecretKey: LANGFUSE_AGENTS_PUBLIC_KEY
+      secretKeySecretKey: LANGFUSE_AGENTS_SECRET_KEY
     resources:
       requests:
         cpu: 100m

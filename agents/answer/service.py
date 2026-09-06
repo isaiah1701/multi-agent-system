@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 
 from agents.answer.agent import answer
 from agents.orchestrator.shared.contracts import AnswerRequest, AnswerResponse, transport_state
+from serving.app.langfuse import request_trace, update_trace_span
 
 app = FastAPI(title="KubeMind answer agent", docs_url=None, redoc_url=None)
 
@@ -32,7 +33,15 @@ async def generate_answer(request: AnswerRequest) -> AnswerResponse:
         "sources": request.sources,
     }
     try:
-        result = await answer(state)
+        with request_trace(
+            request.request_id or "answer-uncorrelated",
+            name="kubemind-answer-request",
+            component="answer",
+            input={"question": request.question},
+            tags=["agents", "answer"],
+        ) as trace:
+            result = await answer(state)
+            update_trace_span(trace, output={"answer": result.get("answer")})
     except Exception:
         raise _internal_error() from None
     answer_text = result.get("answer")

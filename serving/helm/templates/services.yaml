@@ -51,6 +51,20 @@ spec:
               drop: ["ALL"]
           resources:
             {{- toYaml $service.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "kubemind.fullname" $ }}-config
+          env:
+            - name: LANGFUSE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $runtimeSecretName }}
+                  key: {{ required (printf "services.%s.langfuse.publicKeySecretKey is required" $name) $service.langfuse.publicKeySecretKey }}
+            - name: LANGFUSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $runtimeSecretName }}
+                  key: {{ required (printf "services.%s.langfuse.secretKeySecretKey is required" $name) $service.langfuse.secretKeySecretKey }}
           volumeMounts:
             - name: chroma
               mountPath: /app/data/chroma
@@ -73,19 +87,17 @@ spec:
             - secretRef:
                 name: {{ $runtimeSecretName }}
             {{- end }}
-          {{- if eq $name "api" }}
           env:
             - name: LANGFUSE_PUBLIC_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ $runtimeSecretName }}
-                  key: LANGFUSE_PUBLIC_KEY
+                  key: {{ required (printf "services.%s.langfuse.publicKeySecretKey is required" $name) $service.langfuse.publicKeySecretKey }}
             - name: LANGFUSE_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ $runtimeSecretName }}
-                  key: LANGFUSE_SECRET_KEY
-          {{- end }}
+                  key: {{ required (printf "services.%s.langfuse.secretKeySecretKey is required" $name) $service.langfuse.secretKeySecretKey }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

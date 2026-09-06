@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 from eval.evaluate import _summary, _validated_scores, evaluate_case, judge_answer, run
 
@@ -42,7 +42,7 @@ class EvaluationRunnerTests(unittest.TestCase):
 
         self.assertEqual(result["answer"], state["answer"])
         self.assertEqual({metric: result[metric] for metric in scores}, scores)
-        invoke.assert_awaited_once_with(case["question"])
+        invoke.assert_awaited_once_with(case["question"], request_id=ANY)
         judge.assert_awaited_once()
 
     def test_invalid_judge_score_is_rejected(self) -> None:

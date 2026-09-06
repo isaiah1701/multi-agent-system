@@ -13,7 +13,9 @@ resource "aws_iam_openid_connect_provider" "github" {
 
   client_id_list = ["sts.amazonaws.com"]
 
-  thumbprint_list = [var.github_oidc_thumbprint]
+  # Keep both roots during GitHub's certificate-chain rotation. AWS validates
+  # the token endpoint against one of these SHA-1 root CA thumbprints.
+  thumbprint_list = var.github_oidc_thumbprints
 
   tags = var.tags
 }

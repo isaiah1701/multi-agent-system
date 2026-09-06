@@ -19,6 +19,8 @@ from typing import Any, Protocol, Sequence
 
 import yaml
 
+from serving.app.langfuse import observe, update_current_span
+
 
 LOGGER = logging.getLogger(__name__)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -615,6 +617,7 @@ def discover_markdown_documents(corpus_path: Path, limit: int | None = None) -> 
     return documents[:limit] if limit is not None else documents
 
 
+@observe(name="corpus-chunking", as_type="chain", capture_input=False, capture_output=False)
 def chunk_corpus(
     corpus_path: Path,
     *,
@@ -654,6 +657,14 @@ def chunk_corpus(
             continue
         result.chunks.extend(document_chunks)
         result.documents_processed += 1
+    update_current_span(
+        input={"corpus_path": str(corpus_path), "document_limit": limit},
+        output=result.statistics,
+        metadata={
+            "embedding_model": chunking_config.embedding_model_name,
+            "max_chunk_words": chunking_config.max_chunk_words,
+        },
+    )
     return result
 
 

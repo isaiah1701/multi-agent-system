@@ -7,14 +7,15 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from serving.app.langfuse import observe, update_current_span
+from serving.app.langfuse import request_trace, update_trace_span
 
 
 LOGGER = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ class AskResponse(BaseModel):
     """The guarded answer returned by the orchestrator."""
 
     answer: str
+    request_id: str
     is_relevant: bool = True
     sources: list[SourceResponse] = Field(default_factory=list)
 
@@ -104,34 +106,42 @@ def _timeout() -> httpx.Timeout:
     return httpx.Timeout(seconds, connect=min(seconds, 10.0))
 
 
-@observe(name="api-to-orchestrator", as_type="chain", capture_input=False, capture_output=False)
-async def invoke(question: str, *, thread_id: str | None = None) -> dict[str, Any]:
+async def invoke(question: str, *, thread_id: str | None = None, request_id: str | None = None) -> dict[str, Any]:
     """Call the private orchestrator without exposing its network contract to browsers."""
     orchestrator_url = os.getenv(ORCHESTRATOR_SERVICE_URL_ENV, "").strip()
     if not orchestrator_url:
         raise RuntimeError(f"{ORCHESTRATOR_SERVICE_URL_ENV} is not configured")
-    update_current_span(
+    resolved_request_id = request_id or uuid4().hex
+    with request_trace(
+        resolved_request_id,
+        name="kubemind-api-request",
+        component="api",
         input={"question": question},
-        metadata={"thread_id": thread_id or "single-turn", "upstream": "orchestrator"},
-    )
-    try:
-        async with httpx.AsyncClient(timeout=_timeout()) as client:
-            response = await client.post(
-                f"{orchestrator_url.rstrip('/')}/v1/ask",
-                json={"question": question, "thread_id": thread_id},
-            )
-        response.raise_for_status()
-        result = response.json()
-    except (httpx.HTTPError, ValueError) as error:
-        raise RuntimeError("Orchestrator service failed") from error
-    if not isinstance(result, dict):
-        raise RuntimeError("Orchestrator service returned a malformed response")
-    update_current_span(
-        output={
-            "is_relevant": result.get("is_relevant"),
-            "source_count": len(result.get("sources", [])) if isinstance(result.get("sources"), list) else 0,
-        }
-    )
+        session_id=thread_id,
+        tags=["agents", "api"],
+    ) as trace:
+        try:
+            async with httpx.AsyncClient(timeout=_timeout()) as client:
+                response = await client.post(
+                    f"{orchestrator_url.rstrip('/')}/v1/ask",
+                    json={"question": question, "thread_id": thread_id, "request_id": resolved_request_id},
+                )
+            response.raise_for_status()
+            result = response.json()
+        except (httpx.HTTPError, ValueError) as error:
+            raise RuntimeError("Orchestrator service failed") from error
+        if not isinstance(result, dict):
+            raise RuntimeError("Orchestrator service returned a malformed response")
+        result["request_id"] = resolved_request_id
+        update_trace_span(
+            trace,
+            output={
+                "answer": result.get("answer"),
+                "is_relevant": result.get("is_relevant"),
+                "source_count": len(result.get("sources", [])) if isinstance(result.get("sources"), list) else 0,
+            },
+            metadata={"request_id": resolved_request_id, "thread_id": thread_id or "single-turn"},
+        )
     return result
 
 
@@ -148,10 +158,11 @@ async def health() -> HealthResponse:
 
 
 @app.post("/ask", response_model=AskResponse)
-async def ask(request: AskRequest) -> AskResponse:
+async def ask(request: AskRequest, response: Response) -> AskResponse:
     """Validate a browser question and delegate AI work to the private orchestrator."""
+    request_id = uuid4().hex
     try:
-        result = await invoke(request.question, thread_id=request.thread_id)
+        result = await invoke(request.question, thread_id=request.thread_id, request_id=request_id)
     except Exception:
         LOGGER.exception("Orchestrator failed while serving a browser question")
         raise HTTPException(status_code=500, detail=SAFE_ERROR_MESSAGE) from None
@@ -161,8 +172,10 @@ async def ask(request: AskRequest) -> AskResponse:
         LOGGER.error("Orchestrator returned no usable answer")
         raise HTTPException(status_code=502, detail=SAFE_ERROR_MESSAGE)
     is_relevant = result.get("is_relevant")
+    response.headers["X-Request-ID"] = request_id
     return AskResponse(
         answer=answer,
+        request_id=request_id,
         is_relevant=is_relevant if isinstance(is_relevant, bool) else True,
         sources=_public_sources(result.get("sources")),
     )
@@ -192,16 +205,18 @@ def _sse(event: str, payload: dict[str, Any]) -> str:
 async def ask_stream(request: AskRequest) -> StreamingResponse:
     """Return the completed guarded answer over the existing browser SSE contract."""
 
+    request_id = uuid4().hex
+
     async def events() -> Any:
         try:
-            result = await invoke(request.question, thread_id=request.thread_id)
+            result = await invoke(request.question, thread_id=request.thread_id, request_id=request_id)
             answer = result.get("answer")
             if not isinstance(answer, str) or not answer.strip():
                 raise RuntimeError("Orchestrator returned no usable answer")
             yield _sse("replace", {"answer": answer})
             sources = _public_sources(result.get("sources"))
             yield _sse("sources", {"sources": [source.model_dump(mode="json") for source in sources]})
-            yield _sse("done", {})
+            yield _sse("done", {"request_id": request_id})
         except Exception:
             LOGGER.exception("Orchestrator failed while streaming a browser question")
             yield _sse("error", {"message": SAFE_ERROR_MESSAGE})
@@ -209,5 +224,5 @@ async def ask_stream(request: AskRequest) -> StreamingResponse:
     return StreamingResponse(
         events(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "X-Request-ID": request_id},
     )

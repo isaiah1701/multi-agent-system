@@ -51,15 +51,16 @@ def _usage_details(response: object) -> dict[str, int]:
     if usage is None:
         return {}
     details: dict[str, int] = {}
-    for field in (
-        "input_tokens",
-        "output_tokens",
-        "cache_creation_input_tokens",
-        "cache_read_input_tokens",
-    ):
-        value = usage.get(field) if isinstance(usage, dict) else getattr(usage, field, None)
+    fields = (
+        ("input_tokens", "input"),
+        ("output_tokens", "output"),
+        ("cache_creation_input_tokens", "cache_creation_input_tokens"),
+        ("cache_read_input_tokens", "cache_read_input_tokens"),
+    )
+    for source_field, langfuse_field in fields:
+        value = usage.get(source_field) if isinstance(usage, dict) else getattr(usage, source_field, None)
         if isinstance(value, int):
-            details[field] = value
+            details[langfuse_field] = value
     return details
 
 
@@ -93,10 +94,12 @@ async def generate_text(
     system: str,
     prompt: str | list[dict[str, object]],
     max_tokens: int,
+    observation_name: str = "anthropic-stream",
     on_text: TokenHandler | None = None,
 ) -> str:
     """Stream an Anthropic response over SSE and return its accumulated text."""
     update_current_generation(
+        name=observation_name,
         model=model,
         input={"system": system, "prompt": prompt},
         metadata={"max_tokens": str(max_tokens), "streaming": "true"},
@@ -174,11 +177,16 @@ async def create_message(
     system: str,
     messages: list[dict[str, Any]],
     max_tokens: int,
+    observation_name: str = "anthropic-message",
     tools: list[dict[str, Any]] | None = None,
     temperature: float | None = None,
 ) -> Any:
     """Create a native Anthropic message, optionally allowing the registered tools."""
-    update_current_generation(model=model, metadata={"max_tokens": str(max_tokens), "tool_count": str(len(tools or []))})
+    update_current_generation(
+        name=observation_name,
+        model=model,
+        metadata={"max_tokens": str(max_tokens), "tool_count": str(len(tools or []))},
+    )
     request: dict[str, Any] = {
         "model": model,
         "max_tokens": max_tokens,
