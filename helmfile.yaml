@@ -20,6 +20,27 @@ releases:
     version: 10.4.2
     labels:
       app: argocd
+    values:
+      - global:
+          domain: argocd.5hort.site
+        configs:
+          params:
+            server.insecure: true
+        server:
+          ingress:
+            enabled: true
+            ingressClassName: alb
+            hostname: argocd.5hort.site
+            tls: false
+            annotations:
+              alb.ingress.kubernetes.io/scheme: internet-facing
+              alb.ingress.kubernetes.io/target-type: ip
+              alb.ingress.kubernetes.io/group.name: kubemind-public
+              alb.ingress.kubernetes.io/group.order: "10"
+              alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+              alb.ingress.kubernetes.io/ssl-redirect: "443"
+              alb.ingress.kubernetes.io/healthcheck-path: /healthz
+              external-dns.alpha.kubernetes.io/hostname: argocd.5hort.site
 
   - name: aws-load-balancer-controller
     namespace: kube-system

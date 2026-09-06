@@ -18,12 +18,14 @@ ingress:
   enabled: true
   className: alb
   hostname: 5hort.site
-  # Bootstrap the public ALB over HTTP. Enable TLS and the HTTPS listener after
-  # GoDaddy delegates the domain and ACM changes to ISSUED.
   tls:
-    enabled: false
+    enabled: true
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    alb.ingress.kubernetes.io/group.name: kubemind-public
+    alb.ingress.kubernetes.io/group.order: "30"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/healthcheck-path: /health
     external-dns.alpha.kubernetes.io/hostname: 5hort.site
