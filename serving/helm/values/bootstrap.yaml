@@ -95,6 +95,9 @@ langfuse:
   chartVersion: 1.5.41
   values:
     langfuse:
+      image:
+        tag: "3.224.4"
+
       ingress:
         enabled: true
         className: alb
