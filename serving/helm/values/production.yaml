@@ -3,16 +3,16 @@
 images:
   api:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-api
-    tag: sha-d6fd5a559bdfc076b4e0b03f0266603add096bb8
+    tag: sha-86c1152d308ed45136d563515cb5e830e029a03d
   orchestrator:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-orchestrator
-    tag: sha-d6fd5a559bdfc076b4e0b03f0266603add096bb8
+    tag: sha-86c1152d308ed45136d563515cb5e830e029a03d
   retriever:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-retriever
-    tag: sha-d6fd5a559bdfc076b4e0b03f0266603add096bb8
+    tag: sha-86c1152d308ed45136d563515cb5e830e029a03d
   answer:
     repository: 522565516627.dkr.ecr.eu-west-2.amazonaws.com/kubemind-answer
-    tag: sha-d6fd5a559bdfc076b4e0b03f0266603add096bb8
+    tag: sha-86c1152d308ed45136d563515cb5e830e029a03d
 
 ingress:
   enabled: true
@@ -23,9 +23,6 @@ ingress:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/group.name: kubemind-public
-    alb.ingress.kubernetes.io/group.order: "30"
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
-    alb.ingress.kubernetes.io/healthcheck-path: /health
     external-dns.alpha.kubernetes.io/hostname: 5hort.site
