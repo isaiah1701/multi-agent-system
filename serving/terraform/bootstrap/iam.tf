@@ -257,7 +257,25 @@ data "aws_iam_policy_document" "terraform_execution" {
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-cluster-validation",
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-secrets",
       "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-cert-manager",
-      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-dns"
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-dns",
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-langfuse-email"
+    ]
+  }
+
+  statement {
+    sid    = "ManageLangfuseSesIdentity"
+    effect = "Allow"
+    actions = [
+      "ses:CreateEmailIdentity",
+      "ses:DeleteEmailIdentity",
+      "ses:GetEmailIdentity",
+      "ses:ListTagsForResource",
+      "ses:TagResource",
+      "ses:UntagResource"
+    ]
+
+    resources = [
+      "arn:${data.aws_partition.current.partition}:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/*"
     ]
   }
 
@@ -374,12 +392,13 @@ data "aws_iam_policy_document" "terraform_execution" {
   }
 
   statement {
-    sid     = "PassExternalSecretsRoleToEksPods"
+    sid     = "PassApplicationRolesToEksPods"
     effect  = "Allow"
     actions = ["iam:PassRole"]
 
     resources = [
-      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-secrets"
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-external-secrets",
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-langfuse-email"
     ]
 
     condition {

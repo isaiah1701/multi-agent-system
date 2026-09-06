@@ -47,3 +47,13 @@ output "acm_certificate_arn" {
   description = "Regional ACM certificate automatically discovered by the AWS Load Balancer Controller."
   value       = try(module.route53[0].certificate_arn, null)
 }
+
+output "langfuse_ses_identity_arn" {
+  description = "SES domain identity used for Langfuse transactional email."
+  value       = try(aws_sesv2_email_identity.langfuse[0].arn, null)
+}
+
+output "langfuse_email_role_arn" {
+  description = "EKS Pod Identity role used by Langfuse to send transactional email."
+  value       = aws_iam_role.langfuse_email.arn
+}
