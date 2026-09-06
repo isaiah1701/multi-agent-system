@@ -19,6 +19,9 @@ spec:
       server: {{ .Values.destination.server }}
     - namespace: {{ .Values.langfuse.namespace }}
       server: {{ .Values.destination.server }}
+    # cert-manager stores its leader-election Roles and RoleBindings here.
+    - namespace: kube-system
+      server: {{ .Values.destination.server }}
     {{- range $controller := $controllerApplications }}
     - namespace: {{ $controller.namespace }}
       server: {{ $.Values.destination.server }}
@@ -56,6 +59,9 @@ spec:
   syncPolicy:
     syncOptions:
       - CreateNamespace=true
+      # Upstream controller charts contain CRDs whose client-side
+      # last-applied annotation exceeds Kubernetes' annotation size limit.
+      - ServerSideApply=true
     {{- if $.Values.syncPolicy.automated }}
     automated:
       prune: {{ $.Values.syncPolicy.prune }}
