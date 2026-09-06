@@ -34,7 +34,7 @@ locals {
   }, var.tags)
 
   github_oidc_provider_arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
-  dns_enabled              = var.domain_name != null && trimspace(var.domain_name) != ""
+  dns_enabled              = try(trimspace(var.domain_name), "") != ""
   dns_controller_subjects = local.dns_enabled ? {
     external_dns = {
       namespace       = "external-dns"

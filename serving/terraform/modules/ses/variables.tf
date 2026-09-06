@@ -56,8 +56,8 @@ variable "tags" {
 
 locals {
   domain_configuration_valid = !var.enabled || (
-    var.domain_name != null && trimspace(var.domain_name) != "" &&
-    var.hosted_zone_id != null && trimspace(var.hosted_zone_id) != ""
+    try(trimspace(var.domain_name), "") != "" &&
+    try(trimspace(var.hosted_zone_id), "") != ""
   )
 }
 
