@@ -1,5 +1,7 @@
-{{- if .Values.persistence.storageClassConfig.enabled }}
-{{- $storageClass := required "persistence.storageClass is required when persistence.storageClassConfig.enabled is true" .Values.persistence.storageClass }}
+{{- $persistence := .Values.persistence | default (dict) }}
+{{- $storageClassConfig := $persistence.storageClassConfig | default (dict) }}
+{{- if and .Values.agentServices.enabled $storageClassConfig.enabled }}
+{{- $storageClass := required "persistence.storageClass is required when persistence.storageClassConfig.enabled is true" $persistence.storageClass }}
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
