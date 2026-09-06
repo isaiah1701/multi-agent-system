@@ -36,7 +36,8 @@ data "aws_iam_policy_document" "terraform_execution_assume_role" {
         variable = "token.actions.githubusercontent.com:sub"
         values = [
           "repo:${statement.value}:ref:refs/heads/main",
-          "repo:${statement.value}:ref:refs/tags/v*"
+          "repo:${statement.value}:ref:refs/tags/v*",
+          "repo:${statement.value}:environment:production",
         ]
       }
     }
