@@ -119,7 +119,9 @@ jobs:
         run: |
           kubectl rollout status deployment/kubemind-api -n kubemind --timeout=5m
           kubectl rollout status deployment/kubemind-orchestrator -n kubemind --timeout=5m
-          kubectl rollout status deployment/kubemind-retriever -n kubemind --timeout=5m
+          # The retriever rebuilds the corpus index in an init container. The
+          # production corpus currently takes a little over six minutes.
+          kubectl rollout status deployment/kubemind-retriever -n kubemind --timeout=10m
           kubectl rollout status deployment/kubemind-answer -n kubemind --timeout=5m
           kubectl port-forward -n kubemind service/kubemind-api 18000:80 >/tmp/kubemind-port-forward.log 2>&1 &
           PORT_FORWARD_PID=$!
