@@ -146,6 +146,65 @@ async def invoke(question: str, *, thread_id: str | None = None, request_id: str
     return result
 
 
+async def invoke_stream(question: str, *, thread_id: str | None, request_id: str) -> Any:
+    """Proxy the private orchestrator SSE stream without buffering its deltas."""
+    orchestrator_url = os.getenv(ORCHESTRATOR_SERVICE_URL_ENV, "").strip()
+    if not orchestrator_url:
+        raise RuntimeError(f"{ORCHESTRATOR_SERVICE_URL_ENV} is not configured")
+    with request_trace(
+        request_id,
+        name="kubemind-api-request",
+        component="api",
+        trace_name="kubemind-request",
+        input={"question": question},
+        session_id=thread_id,
+        tags=["agents", "api", "sse"],
+    ) as trace:
+        try:
+            buffer = ""
+            async with httpx.AsyncClient(timeout=_timeout()) as client:
+                async with client.stream(
+                    "POST",
+                    f"{orchestrator_url.rstrip('/')}/v1/ask/stream",
+                    json={"question": question, "thread_id": thread_id, "request_id": request_id},
+                ) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_text():
+                        buffer += chunk
+                        while "\n\n" in buffer:
+                            block, buffer = buffer.split("\n\n", 1)
+                            event, payload = _parse_sse(block)
+                            if event == "sources":
+                                sources = _public_sources(payload.get("sources"))
+                                payload = {"sources": [source.model_dump(mode="json") for source in sources]}
+                            elif event == "done":
+                                payload = {"request_id": str(payload.get("request_id") or request_id)}
+                            elif event == "delta":
+                                payload = {"text": str(payload.get("text", ""))}
+                            elif event == "replace":
+                                payload = {"answer": str(payload.get("answer", ""))}
+                            elif event == "error":
+                                payload = {"message": SAFE_ERROR_MESSAGE}
+                            else:
+                                continue
+                            yield _sse(event, payload)
+        except httpx.HTTPError as error:
+            raise RuntimeError("Orchestrator stream failed") from error
+        update_trace_span(trace, metadata={"request_id": request_id, "thread_id": thread_id or "single-turn"})
+
+
+def _parse_sse(block: str) -> tuple[str, dict[str, Any]]:
+    event = "message"
+    data_lines: list[str] = []
+    for line in block.splitlines():
+        if line.startswith("event:"):
+            event = line[6:].strip()
+        elif line.startswith("data:"):
+            data_lines.append(line[5:].lstrip())
+    payload = json.loads("\n".join(data_lines)) if data_lines else {}
+    return event, payload if isinstance(payload, dict) else {}
+
+
 @app.get("/", include_in_schema=False)
 async def chat_page() -> FileResponse:
     """Serve the single-page browser interface from the public service."""
@@ -204,20 +263,16 @@ def _sse(event: str, payload: dict[str, Any]) -> str:
 
 @app.post("/ask/stream")
 async def ask_stream(request: AskRequest) -> StreamingResponse:
-    """Return the completed guarded answer over the existing browser SSE contract."""
+    """Stream guarded answer deltas from the private orchestration pipeline."""
 
     request_id = uuid4().hex
 
     async def events() -> Any:
         try:
-            result = await invoke(request.question, thread_id=request.thread_id, request_id=request_id)
-            answer = result.get("answer")
-            if not isinstance(answer, str) or not answer.strip():
-                raise RuntimeError("Orchestrator returned no usable answer")
-            yield _sse("replace", {"answer": answer})
-            sources = _public_sources(result.get("sources"))
-            yield _sse("sources", {"sources": [source.model_dump(mode="json") for source in sources]})
-            yield _sse("done", {"request_id": request_id})
+            async for event in invoke_stream(
+                request.question, thread_id=request.thread_id, request_id=request_id
+            ):
+                yield event
         except Exception:
             LOGGER.exception("Orchestrator failed while streaming a browser question")
             yield _sse("error", {"message": SAFE_ERROR_MESSAGE})

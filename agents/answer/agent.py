@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import AIMessage
 from langchain_core.runnables.config import RunnableConfig
 from agents.orchestrator.shared.conversation import prompt_with_history, recent_conversation
+from agents.orchestrator.shared.completion import trim_incomplete_final_sentence
 from agents.orchestrator.shared.evidence import build_evidence, format_evidence_for_prompt
 from guardrails import inspect_output, inspect_stream_prefix, parse_backup_judge_allow
 from agents.orchestrator.llm.client import LLMClientError, create_message, generate_text
@@ -299,6 +300,7 @@ async def answer(state: "AgentState", config: RunnableConfig | None = None) -> d
     if not isinstance(final_answer, str) or not final_answer.strip():
         raise RuntimeError("Answer model returned an empty or malformed response")
     final_answer = _remove_mixed_insufficient_evidence_preamble(final_answer)
+    final_answer = trim_incomplete_final_sentence(final_answer)
     guard_result = inspect_output(final_answer, tool_results, sources)
     if guard_result.decision == "block":
         LOGGER.warning("Output guardrail blocked final answer: %s", ", ".join(guard_result.reasons))

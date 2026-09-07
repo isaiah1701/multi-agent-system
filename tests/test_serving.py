@@ -118,23 +118,19 @@ class ServingTests(unittest.TestCase):
             *,
             thread_id: str | None = None,
             request_id: str,
-        ) -> dict[str, str]:
+        ) -> object:
             self.assertEqual(question, "What is a PDB?")
             self.assertEqual(thread_id, "browser-session-1")
             self.assertTrue(request_id)
-            return {
-                "answer": "A PDB protects voluntary disruptions. [1]",
-                "sources": [
-                    {
-                        "id": "1",
-                        "type": "kubernetes_docs",
-                        "title": "Pod Disruptions",
-                        "source": "pod-disruptions.md",
-                    }
-                ],
-            }
+            yield 'event: delta\ndata: {"text": "A PDB protects "}\n\n'
+            yield 'event: delta\ndata: {"text": "voluntary disruptions. [1]"}\n\n'
+            yield (
+                'event: sources\ndata: {"sources": [{"id": "1", "type": "kubernetes_docs", '
+                '"title": "Pod Disruptions", "source": "pod-disruptions.md"}]}\n\n'
+            )
+            yield f'event: done\ndata: {{"request_id": "{request_id}"}}\n\n'
 
-        with patch("serving.app.api.invoke", side_effect=invoke_with_stream):
+        with patch("serving.app.api.invoke_stream", side_effect=invoke_with_stream):
             response = self._request(
                 "POST",
                 "/ask/stream",
@@ -143,16 +139,18 @@ class ServingTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.headers["content-type"].startswith("text/event-stream"))
-        self.assertIn('event: replace\ndata: {"answer": "A PDB protects voluntary disruptions. [1]"}', response.text)
+        self.assertIn('event: delta\ndata: {"text": "A PDB protects "}', response.text)
         self.assertIn('event: sources\ndata: {"sources": [{"id": "1", "type": "kubernetes_docs"', response.text)
         self.assertIn('event: done\ndata: {"request_id": "', response.text)
 
     def test_ask_stream_sends_a_scope_guardrail_rejection_to_the_browser(self) -> None:
         guardrail_answer = "I can only answer Kubernetes and related platform infrastructure questions."
-        with patch(
-            "serving.app.api.invoke",
-            new=AsyncMock(return_value={"answer": guardrail_answer, "is_relevant": False}),
-        ) as invoke:
+
+        async def invoke_with_stream(*_: object, request_id: str, **__: object) -> object:
+            yield f'event: delta\ndata: {{"text": "{guardrail_answer}"}}\n\n'
+            yield f'event: done\ndata: {{"request_id": "{request_id}"}}\n\n'
+
+        with patch("serving.app.api.invoke_stream", side_effect=invoke_with_stream) as invoke:
             response = self._request(
                 "POST",
                 "/ask/stream",
@@ -160,12 +158,10 @@ class ServingTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(f'event: replace\ndata: {{"answer": "{guardrail_answer}"}}', response.text)
+        self.assertIn(f'event: delta\ndata: {{"text": "{guardrail_answer}"}}', response.text)
         self.assertIn('event: done\ndata: {"request_id": "', response.text)
         self.assertNotIn('event: error', response.text)
-        invoke.assert_awaited_once_with(
-            "What is the capital of France?", thread_id="browser-session-1", request_id=ANY
-        )
+        invoke.assert_called_once_with("What is the capital of France?", thread_id="browser-session-1", request_id=ANY)
 
     def test_ask_rejects_empty_and_whitespace_questions(self) -> None:
         for question in ("", "   "):

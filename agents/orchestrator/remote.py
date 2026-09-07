@@ -1,5 +1,6 @@
 """Optional HTTP adapters for independently deployed agent stages."""
 
+import json
 import os
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
@@ -129,27 +130,74 @@ async def answer_remote(
     context = state.get("context")
     if not isinstance(tool_results, list) or not isinstance(sources, list) or not isinstance(context, str):
         raise RuntimeError("Remote answer service was called without retrieval state")
-    response = await _post(
-        os.environ[ANSWER_AGENT_URL_ENV],
-        "/v1/answer",
-        {
-            "question": _question(state),
-            "request_id": _request_id(state),
-            "history": history_for_transport(state),
-            "tool_results": tool_results,
-            "context": context,
-            "sources": sources,
-        },
-    )
+    payload = {
+        "question": _question(state),
+        "request_id": _request_id(state),
+        "history": history_for_transport(state),
+        "tool_results": tool_results,
+        "context": context,
+        "sources": sources,
+    }
+    configurable = (config or {}).get("configurable", {}) if isinstance(config, Mapping) else {}
+    stream_handler = configurable.get("answer_stream_handler")
+    reset_handler = configurable.get("answer_stream_reset_handler")
+    if callable(stream_handler) and callable(reset_handler):
+        response = await _stream_answer(payload, stream_handler, reset_handler)
+    else:
+        response = await _post(os.environ[ANSWER_AGENT_URL_ENV], "/v1/answer", payload)
     answer = response.get("answer")
     returned_sources = response.get("sources")
     if not isinstance(answer, str) or not answer.strip() or not isinstance(returned_sources, list):
         raise RuntimeError("Remote answer service returned malformed state")
 
-    configurable = (config or {}).get("configurable", {}) if isinstance(config, Mapping) else {}
-    stream_handler = configurable.get("answer_stream_handler")
-    if callable(stream_handler):
+    if callable(stream_handler) and not callable(reset_handler):
         callback_result = stream_handler(answer)
         if hasattr(callback_result, "__await__"):
             await callback_result
     return {"answer": answer, "sources": returned_sources, "messages": [AIMessage(content=answer)]}
+
+
+async def _stream_answer(payload: dict[str, Any], stream_handler: Any, reset_handler: Any) -> dict[str, Any]:
+    """Consume the answer service's SSE stream while forwarding guarded events."""
+    final_payload: dict[str, Any] | None = None
+    buffer = ""
+    try:
+        async with httpx.AsyncClient(timeout=_timeout()) as client:
+            async with client.stream(
+                "POST", f"{os.environ[ANSWER_AGENT_URL_ENV].rstrip('/')}/v1/answer/stream", json=payload
+            ) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_text():
+                    buffer += chunk
+                    while "\n\n" in buffer:
+                        block, buffer = buffer.split("\n\n", 1)
+                        event, data = _parse_sse(block)
+                        if event == "delta" and isinstance(data.get("text"), str):
+                            callback = stream_handler(data["text"])
+                            if hasattr(callback, "__await__"):
+                                await callback
+                        elif event == "replace" and isinstance(data.get("answer"), str):
+                            callback = reset_handler(data["answer"])
+                            if hasattr(callback, "__await__"):
+                                await callback
+                        elif event == "done":
+                            final_payload = data
+                        elif event == "error":
+                            raise RuntimeError("Remote answer service failed")
+    except (httpx.HTTPError, ValueError) as error:
+        raise RuntimeError("Remote answer service failed") from error
+    if final_payload is None:
+        raise RuntimeError("Remote answer stream ended without a final response")
+    return final_payload
+
+
+def _parse_sse(block: str) -> tuple[str, dict[str, Any]]:
+    event = "message"
+    data_lines: list[str] = []
+    for line in block.splitlines():
+        if line.startswith("event:"):
+            event = line[6:].strip()
+        elif line.startswith("data:"):
+            data_lines.append(line[5:].lstrip())
+    payload = json.loads("\n".join(data_lines)) if data_lines else {}
+    return event, payload if isinstance(payload, dict) else {}
