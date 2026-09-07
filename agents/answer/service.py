@@ -37,6 +37,7 @@ async def generate_answer(request: AnswerRequest) -> AnswerResponse:
             request.request_id or "answer-uncorrelated",
             name="kubemind-answer-request",
             component="answer",
+            trace_name="kubemind-request",
             input={"question": request.question},
             tags=["agents", "answer"],
         ) as trace:

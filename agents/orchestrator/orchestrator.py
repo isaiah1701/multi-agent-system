@@ -222,6 +222,7 @@ async def invoke(
         resolved_request_id,
         name="kubemind-agent-request",
         component="orchestrator",
+        trace_name="kubemind-request",
         input={"question": question},
         session_id=resolved_thread_id,
         tags=["agents", "langgraph", "orchestrator"],

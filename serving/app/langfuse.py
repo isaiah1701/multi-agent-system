@@ -45,6 +45,7 @@ def request_trace(
     *,
     name: str,
     component: str,
+    trace_name: str | None = None,
     input: Any | None = None,
     session_id: str | None = None,
     tags: list[str] | None = None,
@@ -77,7 +78,7 @@ def request_trace(
                 session_id=session_id,
                 metadata={"request_id": request_id, "component": component},
                 tags=tags or [component],
-                trace_name=name,
+                trace_name=trace_name or name,
             )
         )
     except Exception:  # pragma: no cover - telemetry must never affect the workflow

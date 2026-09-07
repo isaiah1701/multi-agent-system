@@ -102,8 +102,10 @@ services:
     replicaCount: 1
     port: 8081
     langfuse:
-      publicKeySecretKey: LANGFUSE_RETRIEVAL_PUBLIC_KEY
-      secretKeySecretKey: LANGFUSE_RETRIEVAL_SECRET_KEY
+      # All request stages share one Langfuse project and deterministic trace
+      # ID so the trace page can show the complete distributed workflow.
+      publicKeySecretKey: LANGFUSE_AGENTS_PUBLIC_KEY
+      secretKeySecretKey: LANGFUSE_AGENTS_SECRET_KEY
     resources:
       requests:
         cpu: 500m

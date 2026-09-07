@@ -116,6 +116,7 @@ async def invoke(question: str, *, thread_id: str | None = None, request_id: str
         resolved_request_id,
         name="kubemind-api-request",
         component="api",
+        trace_name="kubemind-request",
         input={"question": question},
         session_id=thread_id,
         tags=["agents", "api"],

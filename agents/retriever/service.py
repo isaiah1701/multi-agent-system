@@ -30,6 +30,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResponse:
             request.request_id or "retrieval-uncorrelated",
             name="kubemind-retrieval-request",
             component="retrieval",
+            trace_name="kubemind-request",
             input={"question": request.question},
             tags=["retrieval", "rag"],
         ) as trace:
