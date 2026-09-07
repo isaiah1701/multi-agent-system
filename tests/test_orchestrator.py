@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import patch
 
 from agents.orchestrator.orchestrator import build_app, input_guardrail
-from agents.answer.agent import INSUFFICIENT_EVIDENCE_MESSAGE
+from agents.orchestrator.orchestrator import CONCISE_ANSWER_MAX_TOKENS, PURPOSE_MESSAGE
 
 
 def tool_call(name: str, arguments: dict[str, Any], identifier: str = "toolu_1") -> dict[str, object]:
@@ -146,16 +146,21 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(output["sources"][0]["title"], "Choosing an AWS container service")
         self.assertEqual(select_tools.call_args.kwargs["tools"][-1]["name"], "web_search")
 
-    def test_allowed_question_without_tool_evidence_fails_closed_without_extra_models(self) -> None:
+    def test_allowed_question_without_tool_evidence_uses_concise_claude_fallback(self) -> None:
         with (
             patch("agents.retriever.agent.create_message", return_value=tool_complete()),
             patch("agents.retriever.agent.generate_text", return_value="general guidance briefing") as context_model,
             patch("agents.answer.agent.generate_text", return_value="general Kubernetes guidance") as answer_model,
+            patch(
+                "agents.orchestrator.orchestrator.generate_text",
+                return_value="Use a PDB to limit voluntary disruption while replicas are available.",
+            ) as fallback_model,
         ):
             result = asyncio.run(build_app().ainvoke({"question": "What PDBs should I set?"}))
-        self.assertEqual(result["answer"], INSUFFICIENT_EVIDENCE_MESSAGE)
+        self.assertIn("PDB", result["answer"])
         context_model.assert_not_called()
         answer_model.assert_not_called()
+        self.assertEqual(fallback_model.call_args.kwargs["max_tokens"], CONCISE_ANSWER_MAX_TOKENS)
 
     def test_irrelevant_questions_stop_before_model_or_tools(self) -> None:
         with (
@@ -166,7 +171,7 @@ class OrchestratorTests(unittest.TestCase):
             patch("agents.retriever.agent.TOOL_FUNCTIONS") as tools,
         ):
             result = asyncio.run(build_app().ainvoke({"question": "What is the capital of France?"}))
-        self.assertEqual(result["answer"], "I can only answer Kubernetes and related platform infrastructure questions.")
+        self.assertEqual(result["answer"], PURPOSE_MESSAGE)
         scope_judge.assert_not_called()
         tool_model.assert_not_called()
         context_model.assert_not_called()
@@ -203,13 +208,35 @@ class OrchestratorTests(unittest.TestCase):
                 "agents.orchestrator.orchestrator.create_message",
                 return_value={"content": [{"text": '{"obviously_not_kubernetes_or_infrastructure": false}'}]},
             ) as scope_judge,
+            patch(
+                "agents.orchestrator.orchestrator.generate_text",
+                return_value="Ask me a Kubernetes question and include symptoms, resources, and recent changes.",
+            ) as broad_model,
             patch("agents.retriever.agent.create_message") as tool_model,
         ):
             result = asyncio.run(build_app().ainvoke({"question": "what are you"}))
         self.assertTrue(result["is_relevant"])
-        self.assertIn("KubeMind", result["answer"])
+        self.assertIn("Kubernetes", result["answer"])
         self.assertEqual(result["sources"], [])
+        self.assertEqual(broad_model.call_args.kwargs["max_tokens"], 149)
         scope_judge.assert_called_once()
+        tool_model.assert_not_called()
+
+    def test_short_how_to_use_question_routes_to_broad_claude_answer(self) -> None:
+        with (
+            patch(
+                "agents.orchestrator.orchestrator.create_message",
+                return_value={"content": [{"text": '{"obviously_not_kubernetes_or_infrastructure": false}'}]},
+            ),
+            patch(
+                "agents.orchestrator.orchestrator.generate_text",
+                return_value="Describe your Kubernetes goal or error and I’ll guide you through it.",
+            ) as broad_model,
+            patch("agents.retriever.agent.create_message") as tool_model,
+        ):
+            result = asyncio.run(build_app().ainvoke({"question": "how do I use this?"}))
+        self.assertIn("Kubernetes", result["answer"])
+        self.assertEqual(broad_model.call_args.kwargs["observation_name"], "broad-question-generation")
         tool_model.assert_not_called()
 
     def test_unknown_tool_request_is_returned_safely(self) -> None:
@@ -220,14 +247,54 @@ class OrchestratorTests(unittest.TestCase):
             ),
             patch("agents.retriever.agent.generate_text", return_value="general guidance briefing") as context_model,
             patch("agents.answer.agent.generate_text", return_value="grounded answer") as answer_model,
+            patch(
+                "agents.orchestrator.orchestrator.generate_text",
+                return_value="I couldn't find supporting sources, but Kubernetes status is normally checked with kubectl.",
+            ) as fallback_model,
         ):
             result = asyncio.run(build_app().ainvoke({"question": "Kubernetes status"}))
         output = result["tool_results"][0]["output"]
         self.assertFalse(output["ok"])
         self.assertEqual(output["error"]["code"], "unknown_tool")
-        self.assertEqual(result["answer"], INSUFFICIENT_EVIDENCE_MESSAGE)
+        self.assertIn("kubectl", result["answer"])
         context_model.assert_not_called()
         answer_model.assert_not_called()
+        fallback_model.assert_called_once()
+
+    def test_retrieval_exception_routes_to_claude_fallback(self) -> None:
+        with (
+            patch("agents.retriever.agent.create_message", side_effect=RuntimeError("retriever unavailable")),
+            patch(
+                "agents.orchestrator.orchestrator.generate_text",
+                return_value="Check the pod events and container logs, then verify probes and resource limits.",
+            ) as fallback_model,
+            patch("agents.answer.agent.generate_text") as answer_model,
+        ):
+            result = asyncio.run(build_app().ainvoke({"question": "Why is my Kubernetes pod crashing?"}))
+        self.assertIn("pod events", result["answer"])
+        self.assertTrue(result["retrieval_failed"])
+        fallback_model.assert_called_once()
+        answer_model.assert_not_called()
+
+    def test_remote_retrieval_failure_routes_to_claude_without_calling_answer_service(self) -> None:
+        with (
+            patch("agents.orchestrator.orchestrator.remote_agents_configured", return_value=True),
+            patch(
+                "agents.orchestrator.orchestrator.retrieve_and_context_remote",
+                side_effect=RuntimeError("remote retriever unavailable"),
+            ) as retriever,
+            patch("agents.orchestrator.orchestrator.answer_remote") as answer_service,
+            patch(
+                "agents.orchestrator.orchestrator.generate_text",
+                return_value="Inspect pod events and logs first, then check health probes and resource limits.",
+            ) as fallback_model,
+        ):
+            result = asyncio.run(build_app().ainvoke({"question": "Why is my Kubernetes pod crashing?"}))
+        self.assertTrue(result["retrieval_failed"])
+        self.assertIn("pod events", result["answer"])
+        retriever.assert_called_once()
+        fallback_model.assert_called_once()
+        answer_service.assert_not_called()
 
 
 if __name__ == "__main__":
