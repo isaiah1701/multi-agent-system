@@ -8,6 +8,13 @@ The platform includes input and output guardrails, source-backed responses, cost
 
 Live at [5hort.site](https://5hort.site).
 
+## Prerequisites
+
+- **Local tools:** Git, Python 3.12+, Docker, `kubectl`, Helm, Helmfile, Terraform, and the AWS CLI.
+- **API keys:** An Anthropic API key is required. Langfuse project keys are required for tracing; a GitHub token is recommended for reliable Kubernetes repository lookups.
+- **Accounts:** GitHub and AWS accounts with access to ECR, EKS, IAM, Secrets Manager, and the required Terraform state resources.
+- **Deployment access:** A Kubernetes context for the target cluster and control of a domain or DNS zone when exposing the public services.
+
 ## Runtime Architecture
 
 The system turns curated Kubernetes knowledge and optional tool results into guarded, observable answers.
