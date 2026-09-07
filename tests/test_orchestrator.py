@@ -180,6 +180,8 @@ class OrchestratorTests(unittest.TestCase):
         ):
             result = asyncio.run(build_app().ainvoke({"question": "What PDBs should I set?"}))
         self.assertIn("PDB", result["answer"])
+        self.assertEqual(result["sources"][0]["type"], "model_fallback")
+        self.assertTrue(result["answer"].endswith("[1]"))
         context_model.assert_not_called()
         answer_model.assert_not_called()
         self.assertEqual(fallback_model.call_args.kwargs["max_tokens"], CONCISE_ANSWER_MAX_TOKENS)

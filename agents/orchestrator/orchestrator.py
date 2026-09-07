@@ -40,6 +40,14 @@ PURPOSE_MESSAGE = (
     "KubeMind is for Kubernetes and platform-infrastructure questions, including clusters, workloads, "
     "networking, deployments, and operations."
 )
+CLAUDE_FALLBACK_SOURCE: dict[str, str | None] = {
+    "id": "1",
+    "type": "model_fallback",
+    "title": "Claude general knowledge (retrieval unavailable)",
+    "source": "No external source was retrieved; verify before production use.",
+    "section": None,
+    "url": None,
+}
 BROAD_QUESTION_SYSTEM_PROMPT = """You are KubeMind, a Kubernetes and platform-infrastructure assistant.
 Answer the user's broad in-scope or product-usage question directly and usefully. Explain how to use KubeMind when
 that is what they are asking. Return one complete paragraph of at most 70 words; do not use a list. KubeMind can
@@ -210,6 +218,7 @@ async def _concise_claude_answer(
     system_prompt: str,
     observation_name: str,
     failure_message: str,
+    fallback_provenance: bool = False,
 ) -> dict[str, object]:
     question = str(state.get("question", "")).strip()
     configurable = config.get("configurable", {}) if isinstance(config, Mapping) else {}
@@ -235,11 +244,15 @@ async def _concise_claude_answer(
     except Exception:
         LOGGER.exception("Concise Claude answer failed for %s", observation_name)
         answer_text = failure_message
+    sources: list[dict[str, str | None]] = []
+    if fallback_provenance and answer_text != failure_message:
+        answer_text = f"{answer_text} [1]"
+        sources = [CLAUDE_FALLBACK_SOURCE]
     if guarded_stream is not None:
         await guarded_stream.complete(answer_text)
     else:
         await _emit_answer(answer_text, config)
-    return {"answer": answer_text, "sources": [], "messages": [AIMessage(content=answer_text)]}
+    return {"answer": answer_text, "sources": sources, "messages": [AIMessage(content=answer_text)]}
 
 
 @observe(name="broad-question-answer", as_type="chain", capture_input=False, capture_output=False)
@@ -265,6 +278,7 @@ async def retrieval_fallback(
         system_prompt=RETRIEVAL_FALLBACK_SYSTEM_PROMPT,
         observation_name="retrieval-fallback-generation",
         failure_message="I couldn't retrieve evidence or generate a reliable answer. Please try again.",
+        fallback_provenance=True,
     )
 
 
