@@ -18,11 +18,14 @@ ingress:
   enabled: true
   className: alb
   hostname: 5hort.site
+  ruleHostname: 5hort.site
   tls:
     enabled: true
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: kubemind-public
+    alb.ingress.kubernetes.io/group.order: "30"
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     external-dns.alpha.kubernetes.io/hostname: 5hort.site
