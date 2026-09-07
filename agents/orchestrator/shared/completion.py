@@ -11,6 +11,8 @@ def trim_incomplete_final_sentence(text: str) -> str:
     normalized = text.strip()
     if not normalized:
         return normalized
+    if re.search(r"(?:\s*\[\d+\])+\s*$", normalized):
+        return normalized
     sentence_ends = list(_COMPLETE_SENTENCE.finditer(normalized))
     if not sentence_ends:
         return normalized

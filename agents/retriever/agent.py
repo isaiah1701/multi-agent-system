@@ -103,6 +103,26 @@ def _server_search_evidence(content: list[Any]) -> dict[str, Any] | None:
 async def use_tools(state: "AgentState") -> dict[str, list[dict[str, Any]]]:
     """Let Claude select and execute only registered tools for at most three rounds."""
     question = _question_from(state)
+    normalized_question = " ".join(question.casefold().split())
+    if (
+        "kubernetes" in normalized_question
+        and "release" in normalized_question
+        and any(word in normalized_question for word in ("latest", "current"))
+    ):
+        output = TOOL_FUNCTIONS["github_kubernetes_lookup"](resource_type="latest_release")
+        if inspect.isawaitable(output):
+            output = await output
+        if not isinstance(output, dict):
+            output = _tool_error("malformed_tool_result", "Tool returned a non-object result")
+        return {
+            "tool_results": [
+                {
+                    "tool_name": "github_kubernetes_lookup",
+                    "input": {"resource_type": "latest_release"},
+                    "output": output,
+                }
+            ]
+        }
     history = recent_conversation(state)
     messages: list[dict[str, Any]] = [
         {"role": "user", "content": prompt_with_history(history, f"Current question:\n{question}")}

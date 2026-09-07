@@ -75,6 +75,28 @@ class OrchestratorTests(unittest.TestCase):
         github.assert_called_once_with(resource_type="latest_release")
         self.assertEqual(result["tool_results"][0]["output"]["release"]["tag_name"], "v1.99.0")
 
+    def test_latest_release_question_uses_github_tool_deterministically(self) -> None:
+        github = unittest.mock.Mock(
+            return_value={
+                "resource_type": "latest_release",
+                "ok": True,
+                "release": {
+                    "tag_name": "v1.99.0",
+                    "html_url": "https://github.com/kubernetes/kubernetes/releases/tag/v1.99.0",
+                },
+            }
+        )
+        with (
+            patch.dict("agents.retriever.agent.TOOL_FUNCTIONS", {"github_kubernetes_lookup": github}, clear=False),
+            patch("agents.retriever.agent.create_message") as selector,
+            patch("agents.retriever.agent.generate_text", return_value="release evidence"),
+            patch("agents.answer.agent.generate_text", return_value="v1.99.0 [1]"),
+        ):
+            result = asyncio.run(build_app().ainvoke({"question": "What is the latest Kubernetes release?"}))
+        github.assert_called_once_with(resource_type="latest_release")
+        selector.assert_not_called()
+        self.assertEqual(result["answer"], "v1.99.0 [1]")
+
     def test_agent_can_select_calculator_tool(self) -> None:
         calculator = unittest.mock.Mock(
             return_value={"operation": "resource_utilization", "result": 85.0, "unit": "%"}
