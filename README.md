@@ -83,3 +83,162 @@ flowchart LR
 - **API keys:** An Anthropic API key is required. Langfuse project keys are required for tracing; a GitHub token is recommended for reliable Kubernetes repository lookups.
 - **Accounts:** GitHub and AWS accounts with access to ECR, EKS, IAM, Secrets Manager, and the required Terraform state resources.
 - **Deployment access:** A Kubernetes context for the target cluster and control of a domain or DNS zone when exposing the public services.
+
+## Quick start
+
+Copy the example environment file and add your `ANTHROPIC_API_KEY`, then build, ingest the bundled Kubernetes corpus, and start the services:
+
+```bash
+cp .env.example .env
+docker compose build
+docker compose --profile ingest run --rm ingest
+docker compose up
+```
+
+Open [http://localhost:8000](http://localhost:8000), or verify the API from another terminal:
+
+```bash
+curl -X POST http://localhost:8000/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"What does a PodDisruptionBudget protect against?"}'
+```
+
+For a cloud deployment, follow the [AWS zero-to-live runbook](docs/ZERO_TO_LIVE_RUNBOOK.md).
+
+## Agent flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant API as API / Frontend
+    participant Orchestrator
+    participant Retriever
+    participant Sources as Corpus and Tools
+    participant Answer as Answer Agent
+
+    User->>API: Ask a question
+    API->>Orchestrator: Forward the request
+    Orchestrator->>Orchestrator: Apply input guardrails
+    alt Request is outside scope
+        Orchestrator-->>API: Return a safe rejection
+    else Request is relevant
+        Orchestrator->>Retriever: Request supporting evidence
+        Retriever->>Sources: Search and run approved tools
+        Sources-->>Retriever: Return source material
+        Retriever-->>Orchestrator: Send an evidence briefing
+        Orchestrator->>Answer: Provide the question and evidence
+        Answer->>Answer: Generate and validate a grounded answer
+        Answer-->>Orchestrator: Return the answer and citations
+        Orchestrator-->>API: Return the completed response
+    end
+    API-->>User: Display or stream the result
+```
+
+The orchestrator controls the workflow, the retriever gathers evidence, and the answer agent turns that evidence into a cited response after output checks.
+
+## Evaluation
+
+The golden set exercises five paths: scope guardrails, Kubernetes documentation retrieval, cloud-platform lookup, GitHub release lookup, and deterministic calculation. Each completed answer is scored from `0` to `1` for **faithfulness** to its evidence, **relevance** to the question, and **correctness** against the expected answer. CI requires every average to be at least `0.85`, with no failed cases.
+
+Results from the latest full run on 8 September 2026:
+
+```mermaid
+flowchart LR
+    GOLDEN["Golden set<br/>5 cases"] --> RUN["Scored<br/>5 / 5<br/>0 failures"]
+    RUN --> F["Faithfulness<br/>0.890"]
+    RUN --> R["Relevance<br/>0.980"]
+    RUN --> C["Correctness<br/>0.964"]
+    F --> GATE["Quality gate<br/>PASS<br/>all metrics >= 0.85"]
+    R --> GATE
+    C --> GATE
+
+    classDef pass fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#064e3b;
+    class GATE pass;
+```
+
+The cloud-platform case had the lowest individual score (`0.50` faithfulness). The aggregate gate passed, but per-case scores should still be reviewed for regressions hidden by averages.
+
+Run the evaluation and enforce the same quality gate locally:
+
+```bash
+python -m eval.evaluate
+python scripts/check_golden_set.py --summary eval/summary.json
+```
+
+See the [golden-set cases](eval/golden_set.jsonl), [per-case results](eval/results.jsonl), and [summary metrics](eval/summary.json).
+
+## Cost
+
+Langfuse recorded an average model cost of **$0.0106 per interaction** across the latest golden-set run. This is the application cost users incur, excluding the evaluation-only judge. The five application paths cost `$0.0529` in total; evaluation judging added `$0.0021`. These figures are a snapshot from 8 September 2026 and exclude infrastructure, storage, and network costs.
+
+| Interaction path | Model cost |
+| --- | ---: |
+| Out-of-scope guardrail | $0.0000 |
+| Kubernetes documentation | $0.0177 |
+| Cloud-platform lookup | $0.0238 |
+| GitHub release lookup | $0.0029 |
+| Calculator-assisted path | $0.0086 |
+| **Average** | **$0.0106** |
+
+Costs are controlled in several layers:
+
+- **Claude model tiering:** Claude Haiku 4.5 handles tool selection, evidence briefing, ambiguous input checks, and exceptional output review. The more capable Claude Sonnet 5 model is reserved for the final grounded answer.
+- **Deterministic shortcuts:** Clearly unrelated questions return a fixed scope response without a model call. Arithmetic is performed by the calculator tool, and deterministic input and output checks avoid judge calls on normal paths.
+- **Token-budget tiering:** Evidence generation is capped at 300 tokens. Standard answers target about 200 words with a 400-token cap; only explicitly detailed, architectural, migration, urgent, or incident requests receive the extended target of about 360 words and 900 tokens.
+- **Small fallback budgets:** Ambiguous input review is capped at 32 tokens and backup output review at 48 tokens. The 80-token judge is used only during evaluation, not normal user interactions.
+- **Prompt and context control:** Prompt caching is enabled for stable system, tool, and history prefixes; only necessary tools are selected; retrieved evidence is trimmed before answering; and source-only follow-ups reuse existing evidence when possible.
+
+Actual cost varies with prompt size, selected tools, retrieved context, cache hits, and answer length. Every model call records its model, token usage, and calculated cost in Langfuse for per-request analysis.
+
+## Safety
+
+Safety checks run throughout the request rather than relying on the final model response alone:
+
+```mermaid
+flowchart TD
+    INPUT["User request"] --> API["API validation<br/>type, length, and extra-field checks"]
+    API -->|Invalid| REJECT_API["Reject request"]
+    API -->|Valid| SCOPE["Input guardrail<br/>Kubernetes and platform scope"]
+    SCOPE -->|Clearly unrelated| SAFE_SCOPE["Fixed scope response<br/>no model or tools"]
+    SCOPE -->|Ambiguous| REVIEW_INPUT["Small Haiku review"]
+    REVIEW_INPUT -->|Reject| SAFE_SCOPE
+    REVIEW_INPUT -->|Allow| TOOLS
+    SCOPE -->|Relevant| TOOLS["Tool boundary<br/>registered tools, schemas, domains, and limits"]
+    TOOLS --> EVIDENCE["Evidence boundary<br/>normalize sources and provenance"]
+    EVIDENCE -->|Missing or failed| FALLBACK["Cautious fallback response"]
+    EVIDENCE -->|Usable| ANSWER["Grounded answer generation"]
+    ANSWER --> STREAM["Streaming prefix guard<br/>hold and inspect before release"]
+    STREAM --> FINAL["Final output guard<br/>secrets, errors, length, citations, attribution"]
+    FINAL -->|Allow| PUBLIC["Public response filter<br/>answer and safe source metadata only"]
+    FINAL -->|Uncertain| REVIEW_OUTPUT["Small Haiku backup review"]
+    REVIEW_OUTPUT -->|Allow| PUBLIC
+    FINAL -->|Block| SAFE_OUTPUT["Safe replacement message"]
+    REVIEW_OUTPUT -->|Block or fail| SAFE_OUTPUT
+    PUBLIC --> USER["User"]
+    REJECT_API --> USER
+    SAFE_SCOPE --> USER
+    FALLBACK --> USER
+    SAFE_OUTPUT --> USER
+
+    classDef blocked fill:#fff1f2,stroke:#e11d48,color:#881337;
+    classDef safe fill:#ecfdf5,stroke:#059669,color:#064e3b;
+    class REJECT_API,SAFE_SCOPE,SAFE_OUTPUT blocked;
+    class PUBLIC,USER safe;
+```
+
+| Guardrail | What it catches or constrains |
+| --- | --- |
+| Request validation | Empty or whitespace-only questions, questions over 4,000 characters, oversized identifiers and history, invalid types, and unexpected fields. |
+| Scope control | Clearly unrelated requests; ambiguous requests receive a tightly capped classifier review before tools are available. |
+| Tool policy | Unknown tools, invalid arguments, excessive result limits, arbitrary GitHub repositories, unrestricted URLs, and more than three platform-search uses. Platform search is restricted to approved documentation domains. |
+| Evidence handling | Failed or malformed tool results, missing provenance, excessive evidence, and unsupported citations. Retrieved evidence text remains private rather than being returned through the public API. |
+| Output checks | Empty or oversized answers, Anthropic/AWS/GitHub credential patterns, private keys, credential assignments, stack traces, missing source metadata, and missing or invented citation IDs. |
+| Streaming and errors | Draft text is inspected before release and a tail is retained to catch partial secret patterns. Internal failures become generic public errors or safe replacement responses. |
+
+Questions and retrieved content are treated as untrusted data in the model prompts. They do not grant permission to add tools, expand schemas, or change the domain allowlist, and all generated output still passes the deterministic checks.
+
+## Screenshots
+
+Prompt-injection attempt: KubeMind ignores the embedded instruction to expose a credential and answers the Kubernetes question using cited evidence.
+
+![KubeMind safely handling a prompt-injection attempt](docs/screenshots/injectionAttempt.png)

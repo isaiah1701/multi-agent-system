@@ -4,7 +4,7 @@
   "failed": 0,
   "failure_reasons": {},
   "failure_stages": {},
-  "avg_faithfulness": 0.62,
-  "avg_relevance": 0.83,
-  "avg_correctness": 0.5
+  "avg_faithfulness": 0.89,
+  "avg_relevance": 0.98,
+  "avg_correctness": 0.964
 }

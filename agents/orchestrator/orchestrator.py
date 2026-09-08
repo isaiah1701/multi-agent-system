@@ -36,6 +36,7 @@ underspecified, or plausible follow-up question. Return exactly one JSON object:
 {\"obviously_not_kubernetes_or_infrastructure\": false}."""
 
 CONCISE_ANSWER_MAX_TOKENS = 149
+CONCISE_STREAM_HOLDBACK_CHARACTERS = 64
 PURPOSE_MESSAGE = (
     "KubeMind is for Kubernetes and platform-infrastructure questions, including clusters, workloads, "
     "networking, deployments, and operations."
@@ -195,7 +196,7 @@ class _GuardedConciseStream:
         if decision.decision == "block":
             self._blocked = True
             return
-        releasable_end = max(0, len(self._draft) - 192)
+        releasable_end = max(0, len(self._draft) - CONCISE_STREAM_HOLDBACK_CHARACTERS)
         if releasable_end > self._emitted:
             await _emit_answer(
                 self._draft[self._emitted : releasable_end],

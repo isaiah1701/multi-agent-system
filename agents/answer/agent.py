@@ -103,7 +103,9 @@ if the answer is otherwise grounded. Return exactly one JSON object: {\"allow\":
 BLOCKED_OUTPUT_MESSAGE = "I can’t provide that response because it may contain unsafe or sensitive content."
 UNVERIFIED_OUTPUT_MESSAGE = "I can’t provide a verified answer for that request right now. Please retry or consult the relevant documentation."
 INSUFFICIENT_EVIDENCE_MESSAGE = "I don't have enough sourced evidence to answer that reliably."
-STREAM_HOLDBACK_CHARACTERS = 192
+# Keep enough unreleased text to detect every configured sensitive prefix while
+# allowing ordinary cited answers to become visible promptly.
+STREAM_HOLDBACK_CHARACTERS = 64
 ANSWER_DOCUMENT_CHUNK_LIMIT = 3
 
 

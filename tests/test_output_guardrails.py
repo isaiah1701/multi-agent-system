@@ -157,11 +157,14 @@ class OutputGuardrailTests(unittest.TestCase):
         draft = ("A PDB limits voluntary disruptions while keeping maintenance safer. [1] " * 5).strip()
         streamed: list[str] = []
         resets: list[str] = []
+        streamed_before_completion = False
 
         async def generate_with_fragments(**kwargs: object) -> str:
+            nonlocal streamed_before_completion
             on_text = kwargs["on_text"]
             for start in range(0, len(draft), 40):
                 await on_text(draft[start : start + 40])  # type: ignore[misc]
+                streamed_before_completion = streamed_before_completion or bool(streamed)
             return draft
 
         state = {"question": "What is a PDB?", "context": "Evidence", "tool_results": [], "sources": [self.source]}
@@ -179,6 +182,7 @@ class OutputGuardrailTests(unittest.TestCase):
             )
 
         self.assertEqual(result["answer"], draft)
+        self.assertTrue(streamed_before_completion)
         self.assertEqual("".join(streamed), draft)
         self.assertEqual(resets, [])
 
