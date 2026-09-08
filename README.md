@@ -17,7 +17,17 @@ https://github.com/user-attachments/assets/3d13d763-4818-4c50-abe0-67bec6e42125
 
 ### Contents
 
-[Architecture](#architecture-diagram) · [Prerequisites](#prerequisites) · [Quick start](#quick-start) · [Agent flow](#agent-flow) · [Evaluation](#evaluation) · [Cost](#cost) · [Safety](#safety) · [Screenshots](#screenshots) · [Trade-offs and lessons learned](#trade-offs-and-lessons-learned)
+| Section | What it covers |
+| --- | --- |
+| [Architecture](#architecture-diagram) | System components, data flow, delivery, and observability. |
+| [Prerequisites](#prerequisites) | Required tools, credentials, accounts, and deployment access. |
+| [Quick start](#quick-start) | Local setup and links to the cloud-deployment guide. |
+| [Agent flow](#agent-flow) | How the orchestrator, retriever, tools, and answer agent collaborate. |
+| [Evaluation](#evaluation) | Golden-set design, quality metrics, and measured results. |
+| [Cost](#cost) | Per-interaction costs and the optimizations that control them. |
+| [Safety](#safety) | Guardrails, enforcement points, and the risks they catch. |
+| [Screenshots](#screenshots) | Example answers, traces, agent execution, cost, and injection protection. |
+| [Trade-offs and lessons learned](#trade-offs-and-lessons-learned) | Key decisions involving latency, safety, availability, quality, and cost. |
 
 
 
