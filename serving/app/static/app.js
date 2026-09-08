@@ -249,13 +249,16 @@
     label.textContent = "KubeMind";
     const content = document.createElement("div");
     content.className = "message-content thinking";
-    for (let index = 0; index < 3; index += 1) {
-      content.append(document.createElement("span"));
-    }
     const status = document.createElement("span");
-    status.className = "sr-only";
-    status.textContent = "Thinking";
-    content.append(status);
+    status.className = "thinking-status";
+    status.textContent = "Starting your request...";
+    const dots = document.createElement("span");
+    dots.className = "thinking-dots";
+    dots.setAttribute("aria-hidden", "true");
+    for (let index = 0; index < 3; index += 1) {
+      dots.append(document.createElement("i"));
+    }
+    content.append(status, dots);
     article.append(label, content);
     return article;
   }
@@ -346,6 +349,8 @@
     let assistantMessage = null;
     let streamedAnswer = "";
     let sources = [];
+    let progressMessage = "Starting your request...";
+    const progressStartedAt = window.performance.now();
 
     function showAssistant(answer) {
       if (!assistantMessage) {
@@ -358,13 +363,17 @@
     }
 
     function showProgress(message) {
-      const content = thinking.querySelector(".message-content");
-      if (!content || assistantMessage) return;
-      content.classList.remove("thinking");
-      content.textContent = message;
-      thinking.setAttribute("aria-label", message);
+      if (assistantMessage) return;
+      progressMessage = message;
+      const elapsedSeconds = Math.max(0, Math.floor((window.performance.now() - progressStartedAt) / 1000));
+      const status = thinking.querySelector(".thinking-status");
+      const visibleMessage = elapsedSeconds ? `${progressMessage} ${elapsedSeconds}s` : progressMessage;
+      if (status) status.textContent = visibleMessage;
+      thinking.setAttribute("aria-label", visibleMessage);
       scrollToLatest();
     }
+
+    const progressTimer = window.setInterval(() => showProgress(progressMessage), 1000);
 
     async function revealText(text, replace = false) {
       if (replace) streamedAnswer = "";
@@ -397,6 +406,7 @@
         thinking.replaceWith(createMessage("assistant", SAFE_ERROR_MESSAGE));
       }
     } finally {
+      window.clearInterval(progressTimer);
       setSending(false);
       textarea.focus();
       scrollToLatest();
