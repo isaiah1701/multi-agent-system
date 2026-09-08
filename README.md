@@ -281,3 +281,27 @@ Langfuse reports a total model cost of `$0.040234` for this larger multi-step in
 KubeMind ignores the embedded instruction to expose a credential and answers the legitimate Kubernetes Secrets question using cited evidence.
 
 ![KubeMind safely handling a prompt-injection attempt](docs/screenshots/injectionAttempt.png)
+
+## Trade-offs and lessons learned
+
+Building KubeMind required balancing response quality, safety, availability, latency, and cost. The main engineering trade-offs and lessons were:
+
+### Responsiveness versus safety
+
+Robust input and output guardrails add processing time because every request must be classified and every answer checked before it is shown. This is a worthwhile cost for safer responses, while progressive status updates and token streaming keep the interface responsive and show users that work is continuing.
+
+### Retrieval readiness versus deployment speed
+
+Each retriever release must prepare its Chroma index before it can answer requests reliably. Deploying it as a standard rolling update risks sending traffic to an unprepared pod. Argo Rollouts provides a blue-green release process: the preview retriever hydrates its index and passes readiness checks before it is promoted, keeping the active retriever available throughout deployment.
+
+### Answer quality versus model cost
+
+Using the most capable model for every stage would improve some outputs but make routine interactions unnecessarily expensive. Model tiering provides a better balance: lower-cost Claude models handle tool selection, evidence summaries, and narrow classification tasks, while Claude Sonnet is reserved for final answers that benefit from stronger reasoning.
+
+### Brevity versus completeness
+
+Strict token limits control latency and cost, but a single low limit can reduce answer quality or cut off a complex response. KubeMind therefore uses tiered token budgets: concise questions receive a small allowance, while migration, architecture, incident, and other complex requests receive a larger budget. If a provider still reaches its limit, the answer receives one bounded continuation and an incomplete trailing fragment is never presented as finished.
+
+### Deterministic checks versus model judgement
+
+Deterministic rules are fast, predictable, and inexpensive, so they handle clear scope decisions and known safety patterns. Some ambiguous questions and borderline answers cannot be classified reliably with rules alone. These cases are escalated to a low-cost Claude reviewer with a tightly constrained token budget, preserving nuanced judgement without putting an expensive model on every request path.
