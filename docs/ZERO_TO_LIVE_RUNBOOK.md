@@ -151,16 +151,16 @@ kubectl -n kubemind wait --for=condition=Ready externalsecret/kubemind-runtime -
 
 The Argo CD ExternalDNS application uses domain filter `5hort.site`, an AWS Route 53 ExternalDNS registry, and the cert-manager/external-dns Pod Identity service accounts created by production Terraform. The KubeMind ingress has HTTP 80 and HTTPS 443 listeners, SSL redirect, certificate discovery, and the ExternalDNS hostname annotation.
 
-## 6. Corpus ingestion and rollout checks
+## 6. Retriever blue-green and rollout checks
 
-The retriever Deployment has an `ingest-kubernetes-corpus` init container. It embeds the repository's `corpus/kubernetes/` into the persistent Chroma volume before the retriever becomes Ready. It is therefore part of normal Argo rollout; no separate manual ingestion is needed for EKS.
+The retriever image contains an index built from `corpus/kubernetes/`. During deployment, Argo Rollouts starts a green preview pod with its own writable copy of that index, waits for readiness, and only then switches the active retriever Service. The blue revision continues serving requests throughout preparation, so there is no retrieval fallback window during normal releases.
 
 ```bash
-kubectl -n kubemind rollout status deployment/kubemind-retriever --timeout=15m
+kubectl -n kubemind wait --for=jsonpath='{.status.phase}'=Healthy rollout/kubemind-retriever --timeout=10m
 kubectl -n kubemind rollout status deployment/kubemind-api --timeout=10m
 kubectl -n kubemind rollout status deployment/kubemind-orchestrator --timeout=10m
 kubectl -n kubemind rollout status deployment/kubemind-answer --timeout=10m
-kubectl -n kubemind logs deployment/kubemind-retriever -c ingest-kubernetes-corpus --tail=100
+kubectl -n kubemind get services kubemind-retriever kubemind-retriever-preview
 ```
 
 For local development only, the equivalent ingestion command is:

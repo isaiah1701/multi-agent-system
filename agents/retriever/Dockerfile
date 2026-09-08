@@ -50,20 +50,32 @@ RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels --requi
     && python -m pip check \
     && rm -rf /wheels
 
+COPY --link --chown=10001:10001 ingestion ./ingestion
+COPY --link --chown=10001:10001 serving/app/__init__.py serving/app/langfuse.py ./serving/app/
+COPY --link --chown=10001:10001 corpus ./corpus
+
+USER 10001:10001
+
+# Build the immutable retrieval index into the image. At runtime each blue or
+# green pod copies this seed into its own emptyDir, avoiding a shared-writer PVC
+# and the six-minute in-cluster re-indexing window.
+RUN python -m ingestion.ingest --db-path /app/data/chroma-seed --device cpu
+RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+
+ENV HF_HUB_OFFLINE=1
+
+# Application-only changes are layered after the cached index/models, so CI
+# rebuilds the expensive retrieval assets only when their inputs change.
 COPY --link --chown=10001:10001 agents/__init__.py ./agents/
 COPY --link --chown=10001:10001 agents/retriever/__init__.py agents/retriever/agent.py agents/retriever/prompts.py agents/retriever/service.py ./agents/retriever/
 COPY --link --chown=10001:10001 agents/orchestrator/__init__.py agents/orchestrator/retry.py ./agents/orchestrator/
 COPY --link --chown=10001:10001 agents/orchestrator/llm ./agents/orchestrator/llm
 COPY --link --chown=10001:10001 agents/orchestrator/shared ./agents/orchestrator/shared
 COPY --link --chown=10001:10001 guardrails ./guardrails
-COPY --link --chown=10001:10001 ingestion ./ingestion
-COPY --link --chown=10001:10001 serving/app/__init__.py serving/app/langfuse.py ./serving/app/
 COPY --link --chown=10001:10001 retrieval ./retrieval
 COPY --link --chown=10001:10001 tools ./tools
-COPY --link --chown=10001:10001 corpus ./corpus
 
 STOPSIGNAL SIGTERM
-USER 10001:10001
 EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=2).read()"]
 CMD ["python", "-m", "uvicorn", "agents.retriever.service:app", "--host", "0.0.0.0", "--port", "8081"]

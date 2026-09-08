@@ -166,6 +166,23 @@ class ServingTests(unittest.TestCase):
         self.assertNotIn('event: error', response.text)
         invoke.assert_called_once_with("What is the capital of France?", thread_id="browser-session-1", request_id=ANY)
 
+    def test_ask_stream_emits_progress_while_waiting_for_the_first_answer_delta(self) -> None:
+        async def delayed_stream(*_: object, request_id: str, **__: object) -> object:
+            await asyncio.sleep(0.01)
+            yield 'event: delta\ndata: {"text": "Ready."}\n\n'
+            yield f'event: done\ndata: {{"request_id": "{request_id}"}}\n\n'
+
+        progress = ((0.001, "Still working..."),)
+        with (
+            patch("serving.app.api.invoke_stream", side_effect=delayed_stream),
+            patch("serving.app.api.STREAM_PROGRESS_UPDATES", progress),
+        ):
+            response = self._request("POST", "/ask/stream", json={"question": "Explain a PDB"})
+
+        progress_event = 'event: status\ndata: {"message": "Still working..."}'
+        self.assertIn(progress_event, response.text)
+        self.assertLess(response.text.index(progress_event), response.text.index("event: delta"))
+
     def test_ask_rejects_empty_and_whitespace_questions(self) -> None:
         for question in ("", "   "):
             with self.subTest(question=question), patch("serving.app.api.invoke", new=AsyncMock()) as invoke:

@@ -282,9 +282,17 @@ class HybridRetriever:
         return self._get_reranker().rerank(query, fused)[:k]
 
 
+_DEFAULT_RETRIEVER = HybridRetriever()
+
+
 def retrieve(query: str, k: int = 10) -> list[RetrievalCandidate]:
-    """Retrieve ranked Kubernetes documentation chunks using default local settings."""
-    return HybridRetriever().retrieve(query, k=k)
+    """Retrieve ranked chunks through the process-wide, warmed pipeline."""
+    return _DEFAULT_RETRIEVER.retrieve(query, k=k)
+
+
+def warm_default_retriever() -> None:
+    """Load the index and local models before the service becomes ready."""
+    _DEFAULT_RETRIEVER.retrieve("Kubernetes workload", k=1)
 
 
 def _preview(text: str, length: int = 240) -> str:

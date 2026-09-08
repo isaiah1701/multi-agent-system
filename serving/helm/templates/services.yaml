@@ -2,21 +2,28 @@
 {{- $runtimeSecretName := required "runtimeSecret.name is required" .Values.runtimeSecret.name }}
 {{- range $name, $service := .Values.services }}
 {{- $image := index $.Values.images $name }}
+{{- if eq $name "retriever" }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+{{- else }}
 apiVersion: apps/v1
 kind: Deployment
+{{- end }}
 metadata:
   name: {{ include "kubemind.fullname" $ }}-{{ $name }}
   labels:
     {{- include "kubemind.labels" $ | nindent 4 }}
     app.kubernetes.io/component: {{ $name }}
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-wave: {{ if eq $name "retriever" }}"2"{{ else }}"1"{{ end }}
 spec:
   {{- if eq $name "retriever" }}
-  # Both corpus volumes are EBS ReadWriteOnce claims. Recreate prevents a
-  # rolling replacement from deadlocking on a cross-node multi-attach.
   strategy:
-    type: Recreate
+    blueGreen:
+      activeService: {{ include "kubemind.fullname" $ }}-retriever
+      previewService: {{ include "kubemind.fullname" $ }}-retriever-preview
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 30
   {{- end }}
   replicas: {{ $service.replicaCount }}
   selector:
@@ -42,14 +49,13 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       {{- if eq $name "retriever" }}
-      # The documentation corpus is built into the retriever image, while its
-      # index lives on the Chroma PVC. Build (or refresh) that index before the
-      # API starts so ordinary Kubernetes questions always have citable data.
+      # The image contains an immutable index. A pod-local copy lets blue and
+      # green revisions start concurrently without sharing a writable database.
       initContainers:
-        - name: ingest-kubernetes-corpus
+        - name: prepare-chroma-index
           image: "{{ required (printf "images.%s.repository is required" $name) $image.repository }}:{{ required (printf "images.%s.tag is required" $name) $image.tag }}"
           imagePullPolicy: IfNotPresent
-          command: ["python", "-m", "ingestion.ingest", "--db-path", "/app/data/chroma", "--device", "cpu"]
+          command: ["sh", "-c", "cp -a /app/data/chroma-seed/. /app/data/chroma/"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -74,8 +80,6 @@ spec:
           volumeMounts:
             - name: chroma
               mountPath: /app/data/chroma
-            - name: model-cache
-              mountPath: /home/app/.cache/huggingface
             - name: temporary
               mountPath: /tmp
       {{- end }}
@@ -131,19 +135,13 @@ spec:
             {{- if eq $name "retriever" }}
             - name: chroma
               mountPath: /app/data/chroma
-            - name: model-cache
-              mountPath: /home/app/.cache/huggingface
             {{- end }}
             - name: temporary
               mountPath: /tmp
       volumes:
         {{- if eq $name "retriever" }}
         - name: chroma
-          persistentVolumeClaim:
-            claimName: {{ include "kubemind.fullname" $ }}-chroma
-        - name: model-cache
-          persistentVolumeClaim:
-            claimName: {{ include "kubemind.fullname" $ }}-model-cache
+          emptyDir: {}
         {{- end }}
         - name: temporary
           emptyDir: {}
@@ -166,6 +164,26 @@ spec:
       port: {{ if eq $name "api" }}80{{ else }}{{ $service.port }}{{ end }}
       targetPort: http
 ---
+{{- if eq $name "retriever" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubemind.fullname" $ }}-retriever-preview
+  labels:
+    {{- include "kubemind.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: retriever
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "kubemind.name" $ }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: retriever
+  ports:
+    - name: http
+      port: {{ $service.port }}
+      targetPort: http
+---
+{{- end }}
 {{- end }}
 {{- end }}
 {{- if and .Values.ingress .Values.ingress.enabled }}

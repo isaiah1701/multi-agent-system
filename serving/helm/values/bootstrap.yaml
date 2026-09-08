@@ -7,6 +7,9 @@ agentServices:
   namespace: kubemind
   chartPath: serving/helm
 
+argo-rollouts:
+  enabled: false
+
 persistence:
   storageClassConfig:
     enabled: false
@@ -196,4 +199,3 @@ langfuse:
         existingSecret: langfuse-runtime
         rootUserSecretKey: s3-user
         rootPasswordSecretKey: s3-password
-

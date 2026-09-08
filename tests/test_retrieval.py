@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import replace
 from typing import Any
+from unittest.mock import Mock, patch
 
 from retrieval.retrieve import (
     CrossEncoderReranker,
@@ -13,6 +14,8 @@ from retrieval.retrieve import (
     RetrievalConfig,
     bm25_search,
     reciprocal_rank_fusion,
+    retrieve,
+    warm_default_retriever,
 )
 
 
@@ -135,6 +138,21 @@ class RetrievalTests(unittest.TestCase):
     def test_empty_corpus_returns_no_results_without_loading_models(self) -> None:
         retriever = HybridRetriever(collection=FakeCollection([]))
         self.assertEqual(retriever.retrieve("pod security"), [])
+
+    def test_default_retriever_is_reused_and_can_be_warmed(self) -> None:
+        shared_retriever = Mock()
+        shared_retriever.retrieve.side_effect = [[candidate("answer")], [candidate("warm")]]
+        with patch("retrieval.retrieve._DEFAULT_RETRIEVER", shared_retriever):
+            self.assertEqual(retrieve("pod security", k=1)[0].chunk_id, "answer")
+            warm_default_retriever()
+
+        self.assertEqual(
+            shared_retriever.retrieve.call_args_list[0].args,
+            ("pod security",),
+        )
+        self.assertEqual(shared_retriever.retrieve.call_args_list[0].kwargs, {"k": 1})
+        self.assertEqual(shared_retriever.retrieve.call_args_list[1].args, ("Kubernetes workload",))
+        self.assertEqual(shared_retriever.retrieve.call_args_list[1].kwargs, {"k": 1})
 
 
 if __name__ == "__main__":

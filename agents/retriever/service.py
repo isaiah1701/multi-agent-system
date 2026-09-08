@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 
 from agents.retriever.agent import add_context, use_tools
 from agents.orchestrator.shared.contracts import RetrievalRequest, RetrievalResponse, transport_state
+from retrieval.retrieve import warm_default_retriever
 from serving.app.langfuse import request_trace, update_trace_span
 
-app = FastAPI(title="KubeMind retrieval agent", docs_url=None, redoc_url=None)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Warm local retrieval models before blue-green traffic promotion."""
+    await asyncio.to_thread(warm_default_retriever)
+    yield
+
+
+app = FastAPI(title="KubeMind retrieval agent", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 def _internal_error() -> HTTPException:

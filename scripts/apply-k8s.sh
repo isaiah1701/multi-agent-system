@@ -129,8 +129,10 @@ kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application
 kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/kubemind-agent-services --timeout=10m
 kubectl -n kubemind wait --for=condition=Ready externalsecret/kubemind-runtime --timeout=10m
 
-for deployment in kubemind-api kubemind-orchestrator kubemind-retriever kubemind-answer; do
+for deployment in kubemind-api kubemind-orchestrator kubemind-answer; do
   kubectl -n kubemind rollout status "deployment/$deployment" --timeout=10m
 done
+kubectl -n kubemind wait --for=jsonpath='{.status.phase}'=Healthy \
+  rollout/kubemind-retriever --timeout=10m
 
 printf 'Deployment complete.\n'

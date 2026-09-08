@@ -7,8 +7,8 @@ metadata:
   labels:
     {{- include "kubemind.labels" . | nindent 4 }}
   annotations:
-    # Dynamic EBS binding waits for a scheduled Pod, so keep the claims in
-    # the same Argo CD wave as their consumer Deployments.
+    # Retained during the blue-green migration to avoid destructive pruning of
+    # the previous Chroma data. Retriever Rollouts no longer mount this claim.
     argocd.argoproj.io/sync-wave: "2"
 spec:
   accessModes: ["ReadWriteOnce"]
@@ -26,6 +26,8 @@ metadata:
   labels:
     {{- include "kubemind.labels" . | nindent 4 }}
   annotations:
+    # Retained during the blue-green migration. Retriever Rollouts now read the
+    # model cached inside their immutable image.
     argocd.argoproj.io/sync-wave: "2"
 spec:
   accessModes: ["ReadWriteOnce"]

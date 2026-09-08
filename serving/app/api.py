@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -26,6 +27,11 @@ SAFE_ERROR_MESSAGE = "Something went wrong while processing that question. Pleas
 ORCHESTRATOR_SERVICE_URL_ENV = "ORCHESTRATOR_SERVICE_URL"
 AGENT_SERVICE_TIMEOUT_ENV = "AGENT_SERVICE_TIMEOUT_SECONDS"
 MAX_QUESTION_LENGTH = 4_000
+STREAM_PROGRESS_UPDATES = (
+    (4.0, "Searching documentation and trusted sources..."),
+    (12.0, "Reviewing evidence and preparing the answer..."),
+    (25.0, "Still working on this detailed answer..."),
+)
 
 
 class AskRequest(BaseModel):
@@ -271,14 +277,50 @@ async def ask_stream(request: AskRequest) -> StreamingResponse:
         # Flush an event before retrieval starts so clients can render progress
         # while the grounded answer is being assembled.
         yield _sse("status", {"message": "Checking scope and gathering evidence..."})
+        next_event: asyncio.Task[Any] | None = None
         try:
-            async for event in invoke_stream(
+            stream = invoke_stream(
                 request.question, thread_id=request.thread_id, request_id=request_id
-            ):
+            ).__aiter__()
+            started_at = asyncio.get_running_loop().time()
+            progress_index = 0
+            while True:
+                next_event = asyncio.create_task(anext(stream))
+                while True:
+                    if progress_index >= len(STREAM_PROGRESS_UPDATES):
+                        timeout = None
+                    else:
+                        delay, _ = STREAM_PROGRESS_UPDATES[progress_index]
+                        timeout = max(0.0, started_at + delay - asyncio.get_running_loop().time())
+                    done, _ = await asyncio.wait({next_event}, timeout=timeout)
+                    if done:
+                        break
+                    _, message = STREAM_PROGRESS_UPDATES[progress_index]
+                    progress_index += 1
+                    yield _sse("status", {"message": message})
+                try:
+                    event = next_event.result()
+                except StopAsyncIteration:
+                    break
+                next_event = None
                 yield event
+
+                # Once answer content starts, the normal delta stream itself is
+                # the progress signal and no timed status messages are needed.
+                if event.startswith(("event: delta\n", "event: replace\n")):
+                    async for remaining_event in stream:
+                        yield remaining_event
+                    break
         except Exception:
             LOGGER.exception("Orchestrator failed while streaming a browser question")
             yield _sse("error", {"message": SAFE_ERROR_MESSAGE})
+        finally:
+            if next_event is not None and not next_event.done():
+                next_event.cancel()
+                try:
+                    await next_event
+                except asyncio.CancelledError:
+                    pass
 
     return StreamingResponse(
         events(),

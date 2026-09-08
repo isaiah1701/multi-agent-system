@@ -10,10 +10,10 @@ from typing import Any
 import yaml
 
 
-EXPECTED_DEPLOYMENTS = {
-    "kubemind-orchestrator",
-    "kubemind-retriever",
-    "kubemind-answer",
+EXPECTED_WORKLOADS = {
+    "kubemind-orchestrator": "Deployment",
+    "kubemind-retriever": "Rollout",
+    "kubemind-answer": "Deployment",
 }
 
 
@@ -37,11 +37,18 @@ def verify(path: Path) -> list[str]:
     found: set[str] = set()
     errors: list[str] = []
     for document in documents:
-        if not isinstance(document, dict) or document.get("kind") != "Deployment":
+        if not isinstance(document, dict):
+            continue
+        kind = document.get("kind")
+        if kind not in {"Deployment", "Rollout"}:
             continue
         metadata = document.get("metadata")
         name = metadata.get("name") if isinstance(metadata, dict) else None
-        if name not in EXPECTED_DEPLOYMENTS:
+        if name not in EXPECTED_WORKLOADS:
+            continue
+        expected_kind = EXPECTED_WORKLOADS[name]
+        if kind != expected_kind:
+            errors.append(f"{name}: expected kind {expected_kind}")
             continue
         found.add(name)
         try:
@@ -61,8 +68,8 @@ def verify(path: Path) -> list[str]:
             if error:
                 errors.append(error)
 
-    missing = EXPECTED_DEPLOYMENTS - found
-    errors.extend(f"missing deployment {name}" for name in sorted(missing))
+    missing = set(EXPECTED_WORKLOADS) - found
+    errors.extend(f"missing workload {name}" for name in sorted(missing))
     return errors
 
 
@@ -73,7 +80,7 @@ def main() -> int:
     errors = verify(args.manifest)
     if errors:
         raise SystemExit("Kubernetes probe gate failed:\n- " + "\n- ".join(errors))
-    print("Kubernetes probe gate passed for orchestrator, retriever, and answer.")
+    print("Kubernetes probe gate passed for orchestrator, retriever rollout, and answer.")
     return 0
 
 

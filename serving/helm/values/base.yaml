@@ -4,6 +4,11 @@ bootstrap:
 agentServices:
   enabled: true
 
+argo-rollouts:
+  enabled: true
+  dashboard:
+    enabled: false
+
 runtimeSecret:
   # ESO creates this Kubernetes Secret from the JSON secret in AWS Secrets
   # Manager. Neither the values nor AWS credentials are stored in Git.
@@ -61,8 +66,9 @@ config:
   AGENT_SERVICE_TIMEOUT_SECONDS: "120"
 
 persistence:
-  # EKS does not supply a CSI-backed default class. The production bootstrap
-  # installs this encrypted gp3 class for Chroma and model-cache volumes.
+  # Legacy encrypted gp3 claims are retained during migration so Argo CD does
+  # not destructively prune existing Chroma data. Blue-green retrievers now use
+  # an immutable image seed and pod-local emptyDir instead of these claims.
   storageClass: gp3
   storageClassConfig:
     enabled: true

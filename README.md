@@ -72,6 +72,7 @@ flowchart LR
 - **Agents:** LangGraph coordinates retrieval, tool selection, fallback behavior, and answer generation.
 - **Tools:** Allow-listed documentation, GitHub, platform-search, and calculator tools extend the workflow.
 - **Answer Layer:** Claude produces a streamed response grounded in evidence with source citations.
+- **Delivery:** Argo Rollouts uses blue-green retriever releases, keeping the active index online until the warmed preview is ready.
 - **Guardrails:** Input scope, tool policy, and output checks enforce relevant and safe behavior.
 - **Observability:** Langfuse traces requests, steps, model cost, and quality signals alongside RAGAS metrics.
 
