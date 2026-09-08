@@ -77,6 +77,8 @@ flowchart LR
 
 [View the detailed request-flow diagram](docs/architecture/request-flow.svg) or read the [deployment architecture](docs/ARCHITECTURE.md).
 
+See the [CI/CD architecture](docs/CICD_ARCHITECTURE.md) for the gated path from commit to EKS.
+
 ## Prerequisites
 
 - **Local tools:** Git, Python 3.12+, Docker, `kubectl`, Helm, Helmfile, Terraform, and the AWS CLI.
@@ -239,6 +241,32 @@ Questions and retrieved content are treated as untrusted data in the model promp
 
 ## Screenshots
 
-Prompt-injection attempt: KubeMind ignores the embedded instruction to expose a credential and answers the Kubernetes question using cited evidence.
+### Grounded multi-step answer
+
+KubeMind combines AWS and Kubernetes documentation with a deterministic calculation in one concise response. The result correctly identifies EKS as the Kubernetes service, explains PodDisruptionBudget behaviour during a drain, calculates the error rate as `0.68%`, and returns five visible sources.
+
+![KubeMind answering a multi-step AWS and Kubernetes question](docs/screenshots/multiStepQuestion.png)
+
+### Agent execution flow
+
+The Langfuse graph shows the request crossing the API, orchestrator, and retriever boundaries before document search and calculation feed the evidence briefing. The answer agent then generates the response and passes it through the output guardrail.
+
+![KubeMind agent and tool execution graph](docs/screenshots/agentFlowMultiStepQuestion.png)
+
+### Production trace
+
+The expanded trace correlates the input guardrail, tool selection, retrieval, evidence briefing, grounded answer, and output guardrail. This interaction completed in `24.14 seconds` and produced the cited answer shown above.
+
+![Expanded Langfuse production trace for the multi-step question](docs/screenshots/multiStepQuestionTrace.png)
+
+### Cost breakdown
+
+Langfuse reports a total model cost of `$0.040234` for this larger multi-step interaction: `$0.034364` for input and `$0.005870` for output. This is above the golden-set average because the request uses several evidence paths and creates new cache entries. Prompt-cache creation accounts for `$0.025900` of the input cost and can be reused by later requests with the same stable prefixes.
+
+![Langfuse cost breakdown for the multi-step question](docs/screenshots/multiStepQuestionCost.png)
+
+### Prompt-injection protection
+
+KubeMind ignores the embedded instruction to expose a credential and answers the legitimate Kubernetes Secrets question using cited evidence.
 
 ![KubeMind safely handling a prompt-injection attempt](docs/screenshots/injectionAttempt.png)

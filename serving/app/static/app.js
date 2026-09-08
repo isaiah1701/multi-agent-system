@@ -3,6 +3,7 @@
 
   const THREAD_ID_KEY = "kubemind.thread-id";
   const SAFE_ERROR_MESSAGE = "Something went wrong while processing that question. Please try again.";
+  const STREAM_RENDER_CHUNK_CHARACTERS = 16;
   const form = document.querySelector("#composer");
   const textarea = document.querySelector("#question");
   const sendButton = document.querySelector("#send");
@@ -265,6 +266,11 @@
     });
   }
 
+  function waitForPaint() {
+    if (document.hidden) return Promise.resolve();
+    return new Promise((resolve) => window.requestAnimationFrame(resolve));
+  }
+
   function setSending(sending) {
     isSending = sending;
     textarea.disabled = sending;
@@ -314,7 +320,7 @@
         const event = parseSseEvent(rawEvent);
         if (event) {
           if (event.event === "error") throw new Error(event.payload.message || "The assistant request failed");
-          handleEvent(event);
+          await handleEvent(event);
           if (event.event === "done") completed = true;
         }
         boundary = buffer.indexOf("\n\n");
@@ -351,14 +357,21 @@
       scrollToLatest();
     }
 
+    async function revealText(text, replace = false) {
+      if (replace) streamedAnswer = "";
+      for (let index = 0; index < text.length; index += STREAM_RENDER_CHUNK_CHARACTERS) {
+        streamedAnswer += text.slice(index, index + STREAM_RENDER_CHUNK_CHARACTERS);
+        showAssistant(streamedAnswer);
+        await waitForPaint();
+      }
+    }
+
     try {
-      await streamAnswer(trimmedQuestion, ({ event, payload }) => {
+      await streamAnswer(trimmedQuestion, async ({ event, payload }) => {
         if (event === "delta" && typeof payload.text === "string") {
-          streamedAnswer += payload.text;
-          showAssistant(streamedAnswer);
+          await revealText(payload.text);
         } else if (event === "replace" && typeof payload.answer === "string") {
-          streamedAnswer = payload.answer;
-          showAssistant(streamedAnswer);
+          await revealText(payload.answer, true);
         } else if (event === "sources" && Array.isArray(payload.sources)) {
           sources = payload.sources;
           if (assistantMessage) showAssistant(streamedAnswer);
