@@ -15,6 +15,9 @@ Live at [5hort.site](https://5hort.site).
 
 https://github.com/user-attachments/assets/3d13d763-4818-4c50-abe0-67bec6e42125
 
+### Contents
+
+[Architecture](#architecture-diagram) · [Prerequisites](#prerequisites) · [Quick start](#quick-start) · [Agent flow](#agent-flow) · [Evaluation](#evaluation) · [Cost](#cost) · [Safety](#safety) · [Screenshots](#screenshots) · [Trade-offs and lessons learned](#trade-offs-and-lessons-learned)
 
 
 
