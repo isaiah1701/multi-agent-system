@@ -6,6 +6,8 @@ agentServices:
 
 argo-rollouts:
   enabled: true
+  clusterInstall: false
+  createClusterAggregateRoles: false
   dashboard:
     enabled: false
 

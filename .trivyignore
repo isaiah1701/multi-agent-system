@@ -8,3 +8,10 @@ CVE-2025-47273
 # credentials are never rendered into this ConfigMap; ESO supplies them from
 # AWS Secrets Manager instead.
 KSV-0109
+AVD-KSV-0109
+
+# A blue-green controller must patch Service selectors to switch the active
+# ReplicaSet. The controller is intentionally namespace-scoped to kubemind and
+# cluster-wide RBAC/aggregate roles are disabled.
+KSV-0056
+AVD-KSV-0056
