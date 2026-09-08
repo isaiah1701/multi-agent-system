@@ -8,6 +8,14 @@ The platform includes input and output guardrails, source-backed responses, cost
 
 Live at [5hort.site](https://5hort.site).
 
+### Demo
+
+<video src="docs/screenshots/k8Agent.mp4" controls width="100%">
+  Your browser does not support embedded video. [Watch the KubeMind demo](docs/screenshots/k8Agent.mp4).
+</video>
+
+[Open the KubeMind demo video](docs/screenshots/k8Agent.mp4).
+
 ## Architecture diagram 
 
 The system turns curated Kubernetes knowledge and optional tool results into guarded, observable answers.
