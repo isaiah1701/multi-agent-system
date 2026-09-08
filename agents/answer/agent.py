@@ -294,6 +294,7 @@ async def answer(state: "AgentState", config: RunnableConfig | None = None) -> d
             # Buffer model output until it passes the output guardrail. Raw
             # provider fragments are released only through the guarded stream.
             on_text=guarded_stream.receive if guarded_stream is not None else None,
+            complete_on_token_limit=True,
         )
     except (LLMClientError, ValueError) as error:
         raise RuntimeError("Answer generation failed") from error

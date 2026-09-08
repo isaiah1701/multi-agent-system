@@ -14,6 +14,10 @@ class CompletionTests(unittest.TestCase):
         answer = "A PodDisruptionBudget limits voluntary disruptions. [1]"
         self.assertEqual(trim_incomplete_final_sentence(answer), answer)
 
+    def test_does_not_treat_a_cutoff_abbreviation_as_a_finished_sentence(self) -> None:
+        answer = "Use EKS for Kubernetes. Cut traffic over gradually (e."
+        self.assertEqual(trim_incomplete_final_sentence(answer), "Use EKS for Kubernetes.")
+
 
 if __name__ == "__main__":
     unittest.main()

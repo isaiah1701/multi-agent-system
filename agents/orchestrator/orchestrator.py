@@ -238,6 +238,7 @@ async def _concise_claude_answer(
             max_tokens=CONCISE_ANSWER_MAX_TOKENS,
             observation_name=observation_name,
             on_text=guarded_stream.receive if guarded_stream is not None else None,
+            complete_on_token_limit=True,
         )
         completed_draft = trim_incomplete_final_sentence(draft)
         guard_result = inspect_output(completed_draft, [], None)

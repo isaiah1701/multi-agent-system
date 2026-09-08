@@ -6,7 +6,30 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from agents.orchestrator.llm.client import create_message
+from agents.orchestrator.llm.client import create_message, generate_text
+
+
+class FakeStream:
+    def __init__(self, chunks: list[str], stop_reason: str) -> None:
+        self._chunks = chunks
+        self._stop_reason = stop_reason
+
+    async def __aenter__(self) -> "FakeStream":
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+    @property
+    def text_stream(self):  # type: ignore[no-untyped-def]
+        async def chunks():  # type: ignore[no-untyped-def]
+            for chunk in self._chunks:
+                yield chunk
+
+        return chunks()
+
+    async def get_final_message(self) -> dict[str, object]:
+        return {"stop_reason": self._stop_reason}
 
 
 class ProviderError(Exception):
@@ -16,6 +39,35 @@ class ProviderError(Exception):
 
 
 class LLMClientRetryTests(unittest.TestCase):
+    def test_generate_text_continues_once_after_a_token_limit(self) -> None:
+        client = Mock()
+        client.messages.stream = Mock(
+            side_effect=[
+                FakeStream(["Use a staged rollout, then ver"], "max_tokens"),
+                FakeStream(["ify service health."], "end_turn"),
+            ]
+        )
+        streamed: list[str] = []
+
+        with patch("agents.orchestrator.llm.client.get_async_client", return_value=client):
+            result = asyncio.run(
+                generate_text(
+                    model="test-model",
+                    system="system",
+                    prompt="question",
+                    max_tokens=100,
+                    on_text=streamed.append,
+                    complete_on_token_limit=True,
+                )
+            )
+
+        self.assertEqual(result, "Use a staged rollout, then verify service health.")
+        self.assertEqual("".join(streamed), result)
+        self.assertEqual(client.messages.stream.call_count, 2)
+        continuation = client.messages.stream.call_args.kwargs["messages"]
+        self.assertEqual(continuation[1]["role"], "assistant")
+        self.assertIn("Continue exactly where you stopped", continuation[2]["content"])
+
     def test_create_message_marks_stable_system_and_tool_prefixes_for_anthropic_cache(self) -> None:
         client = Mock()
         client.messages.create = AsyncMock(

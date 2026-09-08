@@ -22,6 +22,10 @@ class LLMClientError(RuntimeError):
 _async_client: Any | None = None
 TokenHandler = Callable[[str], Awaitable[None] | None]
 LOGGER = logging.getLogger(__name__)
+_CONTINUE_AFTER_TOKEN_LIMIT = (
+    "Continue exactly where you stopped. Finish the answer concisely without repeating any text or adding a new "
+    "introduction."
+)
 
 
 def cached_text_block(text: str) -> dict[str, object]:
@@ -96,35 +100,70 @@ async def generate_text(
     max_tokens: int,
     observation_name: str = "anthropic-stream",
     on_text: TokenHandler | None = None,
+    complete_on_token_limit: bool = False,
 ) -> str:
-    """Stream an Anthropic response over SSE and return its accumulated text."""
+    """Stream an Anthropic response and optionally finish one token-limited answer."""
     update_current_generation(
         name=observation_name,
         model=model,
         input={"system": system, "prompt": prompt},
-        metadata={"max_tokens": str(max_tokens), "streaming": "true"},
+        metadata={
+            "max_tokens": str(max_tokens),
+            "streaming": "true",
+            "complete_on_token_limit": str(complete_on_token_limit).lower(),
+        },
     )
     emitted_text = False
 
     async def request() -> str:
         nonlocal emitted_text
         parts: list[str] = []
-        async with get_async_client().messages.stream(
-            model=model,
-            max_tokens=max_tokens,
-            system=_cached_system(system),
-            messages=[{"role": "user", "content": prompt}],
-        ) as stream:
-            async for text in stream.text_stream:
-                emitted_text = True
-                parts.append(text)
-                if on_text is not None:
-                    callback_result = on_text(text)
-                    if isawaitable(callback_result):
-                        await callback_result
-            get_final_message = getattr(stream, "get_final_message", None)
-            if callable(get_final_message):
-                _record_usage(await get_final_message())
+        messages: list[dict[str, object]] = [{"role": "user", "content": prompt}]
+        continuation_available = complete_on_token_limit
+        is_continuation = False
+        while True:
+            final_message: object | None = None
+            try:
+                async with get_async_client().messages.stream(
+                    model=model,
+                    max_tokens=max_tokens,
+                    system=_cached_system(system),
+                    messages=messages,
+                ) as stream:
+                    async for text in stream.text_stream:
+                        emitted_text = True
+                        parts.append(text)
+                        if on_text is not None:
+                            callback_result = on_text(text)
+                            if isawaitable(callback_result):
+                                await callback_result
+                    get_final_message = getattr(stream, "get_final_message", None)
+                    if callable(get_final_message):
+                        final_message = await get_final_message()
+                        _record_usage(final_message)
+            except Exception:
+                # The caller can trim and safely replace an already-streamed
+                # partial answer if the optional continuation itself fails.
+                if is_continuation and parts:
+                    LOGGER.warning("Token-limit continuation failed; returning the safe completed prefix")
+                    break
+                raise
+
+            stop_reason = (
+                final_message.get("stop_reason")
+                if isinstance(final_message, dict)
+                else getattr(final_message, "stop_reason", None)
+            )
+            if stop_reason != "max_tokens" or not continuation_available:
+                break
+            continuation_available = False
+            is_continuation = True
+            draft = "".join(parts)
+            messages = [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": draft},
+                {"role": "user", "content": _CONTINUE_AFTER_TOKEN_LIMIT},
+            ]
         text = "".join(parts).strip()
         if not text:
             raise LLMClientError("Anthropic returned no text content")
