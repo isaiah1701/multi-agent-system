@@ -10,11 +10,13 @@ Live at [5hort.site](https://5hort.site).
 
 ### Demo
 
-<video src="docs/screenshots/k8Agent.mp4" controls width="100%">
-  Your browser does not support embedded video. [Watch the KubeMind demo](docs/screenshots/k8Agent.mp4).
-</video>
 
-[Open the KubeMind demo video](docs/screenshots/k8Agent.mp4).
+
+
+https://github.com/user-attachments/assets/3d13d763-4818-4c50-abe0-67bec6e42125
+
+
+
 
 ## Architecture diagram 
 
