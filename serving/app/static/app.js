@@ -357,6 +357,15 @@
       scrollToLatest();
     }
 
+    function showProgress(message) {
+      const content = thinking.querySelector(".message-content");
+      if (!content || assistantMessage) return;
+      content.classList.remove("thinking");
+      content.textContent = message;
+      thinking.setAttribute("aria-label", message);
+      scrollToLatest();
+    }
+
     async function revealText(text, replace = false) {
       if (replace) streamedAnswer = "";
       for (let index = 0; index < text.length; index += STREAM_RENDER_CHUNK_CHARACTERS) {
@@ -368,7 +377,9 @@
 
     try {
       await streamAnswer(trimmedQuestion, async ({ event, payload }) => {
-        if (event === "delta" && typeof payload.text === "string") {
+        if (event === "status" && typeof payload.message === "string") {
+          showProgress(payload.message);
+        } else if (event === "delta" && typeof payload.text === "string") {
           await revealText(payload.text);
         } else if (event === "replace" && typeof payload.answer === "string") {
           await revealText(payload.answer, true);

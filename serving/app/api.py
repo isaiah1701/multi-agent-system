@@ -268,6 +268,9 @@ async def ask_stream(request: AskRequest) -> StreamingResponse:
     request_id = uuid4().hex
 
     async def events() -> Any:
+        # Flush an event before retrieval starts so clients can render progress
+        # while the grounded answer is being assembled.
+        yield _sse("status", {"message": "Checking scope and gathering evidence..."})
         try:
             async for event in invoke_stream(
                 request.question, thread_id=request.thread_id, request_id=request_id

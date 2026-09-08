@@ -139,9 +139,12 @@ class ServingTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.headers["content-type"].startswith("text/event-stream"))
+        status_event = 'event: status\ndata: {"message": "Checking scope and gathering evidence..."}'
+        self.assertIn(status_event, response.text)
         self.assertIn('event: delta\ndata: {"text": "A PDB protects "}', response.text)
         self.assertIn('event: sources\ndata: {"sources": [{"id": "1", "type": "kubernetes_docs"', response.text)
         self.assertIn('event: done\ndata: {"request_id": "', response.text)
+        self.assertLess(response.text.index(status_event), response.text.index("event: delta"))
 
     def test_ask_stream_sends_a_scope_guardrail_rejection_to_the_browser(self) -> None:
         guardrail_answer = "I can only answer Kubernetes and related platform infrastructure questions."
