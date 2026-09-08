@@ -60,8 +60,8 @@ spec:
             - |
               mkdir -p /tmp/huggingface
               if test -d /app/data/chroma-seed; then
-                cp -a /app/data/chroma-seed/. /app/data/chroma/
-                cp -a /home/app/.cache/huggingface/. /tmp/huggingface/
+                cp -R /app/data/chroma-seed/. /app/data/chroma/
+                cp -R /home/app/.cache/huggingface/. /tmp/huggingface/
               else
                 HF_HOME=/tmp/huggingface python -m ingestion.ingest --db-path /app/data/chroma --device cpu
               fi
