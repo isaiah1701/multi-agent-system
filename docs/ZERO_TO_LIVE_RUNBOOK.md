@@ -153,7 +153,7 @@ The Argo CD ExternalDNS application uses domain filter `5hort.site`, an AWS Rout
 
 ## 6. Retriever blue-green and rollout checks
 
-The retriever image contains an index built from `corpus/kubernetes/`. During deployment, Argo Rollouts starts a green preview pod with its own writable copy of that index, waits for readiness, and only then switches the active retriever Service. The blue revision continues serving requests throughout preparation, so there is no retrieval fallback window during normal releases.
+The retriever image contains an index built from `corpus/kubernetes/`. During deployment, Argo Rollouts starts a green preview pod with its own writable copy of that index, waits for readiness, and only then switches the active retriever Service. The blue revision continues serving requests throughout preparation, so there is no retrieval fallback window during normal releases. The init step temporarily supports pre-seed images by rebuilding their index into pod-local storage, which keeps the first Deployment-to-Rollout migration compatible.
 
 ```bash
 kubectl -n kubemind wait --for=jsonpath='{.status.phase}'=Healthy rollout/kubemind-retriever --timeout=10m

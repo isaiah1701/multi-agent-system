@@ -55,7 +55,16 @@ spec:
         - name: prepare-chroma-index
           image: "{{ required (printf "images.%s.repository is required" $name) $image.repository }}:{{ required (printf "images.%s.tag is required" $name) $image.tag }}"
           imagePullPolicy: IfNotPresent
-          command: ["sh", "-c", "cp -a /app/data/chroma-seed/. /app/data/chroma/"]
+          command: ["sh", "-ec"]
+          args:
+            - |
+              mkdir -p /tmp/huggingface
+              if test -d /app/data/chroma-seed; then
+                cp -a /app/data/chroma-seed/. /app/data/chroma/
+                cp -a /home/app/.cache/huggingface/. /tmp/huggingface/
+              else
+                HF_HOME=/tmp/huggingface python -m ingestion.ingest --db-path /app/data/chroma --device cpu
+              fi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -67,6 +76,8 @@ spec:
             - configMapRef:
                 name: {{ include "kubemind.fullname" $ }}-config
           env:
+            - name: HF_HOME
+              value: /tmp/huggingface
             - name: LANGFUSE_PUBLIC_KEY
               valueFrom:
                 secretKeyRef:
@@ -98,6 +109,10 @@ spec:
                 name: {{ $runtimeSecretName }}
             {{- end }}
           env:
+            {{- if eq $name "retriever" }}
+            - name: HF_HOME
+              value: /tmp/huggingface
+            {{- end }}
             - name: LANGFUSE_PUBLIC_KEY
               valueFrom:
                 secretKeyRef:
