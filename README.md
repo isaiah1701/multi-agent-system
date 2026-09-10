@@ -6,7 +6,7 @@ This is a production-style multi-agent AI system for answering Kubernetes and pl
 
 The platform includes input and output guardrails, source-backed responses, cost and model tracing, request-level observability, and RAGAS quality metrics. It demonstrates the security, reliability, and observability patterns organizations need when operating AI systems at scale.
 
-Live at [5hort.site](https://5hort.site).
+Was hosted on  [5hort.site](https://5hort.site) not currently live.
 
 ### Demo
 
