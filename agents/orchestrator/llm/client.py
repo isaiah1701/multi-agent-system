@@ -185,8 +185,7 @@ def _request_error(model: str, error: Exception) -> LLMClientError:
     """Map provider failures to the project-wide client error type."""
     if getattr(error, "status_code", None) == 404:
         return LLMClientError(
-            f"Anthropic model {model!r} was not found or is unavailable to this API key. "
-            "Set CONTEXT_MODEL or ANSWER_MODEL in .env to an enabled model ID."
+            f"Pinned Anthropic model {model!r} was not found or is unavailable to this API key."
         )
     return LLMClientError("Anthropic request failed")
 

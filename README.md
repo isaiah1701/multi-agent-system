@@ -192,7 +192,7 @@ Langfuse recorded an average model cost of **$0.0106 per interaction** across th
 
 Costs are controlled in several layers:
 
-- **Claude model tiering:** Claude Haiku 4.5 handles tool selection, evidence briefing, ambiguous input checks, and exceptional output review. The more capable Claude Sonnet 5 model is reserved for the final grounded answer.
+- **Claude model tiering:** Pinned Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) handles tool selection, evidence briefing, ambiguous input checks, evaluation, and exceptional output review. Pinned Claude Sonnet 5 (`claude-sonnet-5`) is reserved for the final grounded answer. Model IDs are constants in the application and cannot be changed through environment variables or deployment values.
 - **Deterministic shortcuts:** Clearly unrelated questions return a fixed scope response without a model call. Arithmetic is performed by the calculator tool, and deterministic input and output checks avoid judge calls on normal paths.
 - **Token-budget tiering:** Evidence generation is capped at 300 tokens. Standard answers target about 200 words with a 400-token cap; only explicitly detailed, architectural, migration, urgent, or incident requests receive the extended target of about 360 words and 900 tokens.
 - **Small fallback budgets:** Ambiguous input review is capped at 32 tokens and backup output review at 48 tokens. The 80-token judge is used only during evaluation, not normal user interactions.

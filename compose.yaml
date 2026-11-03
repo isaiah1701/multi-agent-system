@@ -2,8 +2,6 @@ name: kubemind
 
 x-agent-environment: &agent-environment
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-  CONTEXT_MODEL: ${CONTEXT_MODEL:-claude-haiku-4-5-20251001}
-  ANSWER_MODEL: ${ANSWER_MODEL:-claude-sonnet-5}
   LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
   LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
   LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}
