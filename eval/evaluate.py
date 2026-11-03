@@ -31,6 +31,19 @@ RESULTS_PATH = EVAL_DIRECTORY / "results.jsonl"
 SUMMARY_PATH = EVAL_DIRECTORY / "summary.json"
 METRICS = ("faithfulness", "relevance", "correctness")
 MAX_JUDGE_CONTEXT_CHARS = 1_200
+CALCULATION_VALUE_ALIASES = {
+    "numerator": ("numerator", "part"),
+    "denominator": ("denominator", "total"),
+    "previous": ("previous", "old", "old_value"),
+    "current": ("current", "new", "new_value"),
+    "failures": ("failures", "errors"),
+    "requests": ("requests", "total"),
+    "successful": ("successful", "available"),
+    "used": ("used",),
+    "limit": ("limit",),
+    "unavailable": ("unavailable", "unavailable_replicas"),
+    "total_replicas": ("total_replicas", "total"),
+}
 JUDGE_SYSTEM_PROMPT = (
     "Score a Kubernetes assistant. Return only JSON with numeric faithfulness, relevance, and correctness from 0.0 to 1.0. "
     "Faithfulness means no unsupported claims versus EVIDENCE; relevance means directly answering QUESTION; "
@@ -103,10 +116,31 @@ def _reference(case: Mapping[str, Any]) -> str | None:
         return None
     reference = {
         name: expected[name]
-        for name in ("is_relevant", "answer_requirements", "calculation")
+        for name in ("is_relevant", "answer_requirements", "calculation", "required_source_types")
         if name in expected
     }
     return json.dumps(reference, ensure_ascii=False, separators=(",", ":")) if reference else None
+
+
+def _evaluation_context(state: Mapping[str, Any]) -> str | None:
+    """Give the judge retrieved evidence and public source metadata for source-only turns."""
+    parts: list[str] = []
+    sources = state.get("sources")
+    if isinstance(sources, list):
+        for source in sources:
+            if not isinstance(source, Mapping):
+                continue
+            metadata = {
+                key: source[key]
+                for key in ("id", "type", "title", "source", "url")
+                if source.get(key) is not None
+            }
+            if metadata:
+                parts.append("SOURCE METADATA: " + json.dumps(metadata, ensure_ascii=False, separators=(",", ":")))
+    context = state.get("context")
+    if isinstance(context, str) and context.strip():
+        parts.append(context.strip())
+    return "\n\n".join(parts) or None
 
 
 def _response_text(response: Any) -> str:
@@ -201,6 +235,117 @@ def _tool_summary(state: Mapping[str, Any]) -> dict[str, Any]:
     return {"tool_count": len(names), "tool_names": names, "tool_failures": failures}
 
 
+def _contract_failures(case: Mapping[str, Any], state: Mapping[str, Any]) -> list[str]:
+    """Check case-declared routing and calculation expectations deterministically."""
+    expected = case.get("expected")
+    if not isinstance(expected, Mapping):
+        return []
+    failures: list[str] = []
+    summary = _tool_summary(state)
+    tool_names = summary["tool_names"]
+    for name in expected.get("required_tools", []):
+        if name not in tool_names:
+            failures.append(f"missing_required_tool:{name}")
+    for name in expected.get("forbidden_tools", []):
+        if name in tool_names:
+            failures.append(f"forbidden_tool_used:{name}")
+    expected_relevance = expected.get("is_relevant")
+    if isinstance(expected_relevance, bool) and state.get("is_relevant") is not expected_relevance:
+        failures.append(f"is_relevant_mismatch:expected_{str(expected_relevance).lower()}")
+    sources = state.get("sources")
+    source_types = {
+        source.get("type")
+        for source in sources
+        if isinstance(source, Mapping) and isinstance(source.get("type"), str)
+    } if isinstance(sources, list) else set()
+    for source_type in expected.get("required_source_types", []):
+        if source_type not in source_types:
+            failures.append(f"missing_required_source_type:{source_type}")
+
+    tool_results = state.get("tool_results")
+    if not isinstance(tool_results, list):
+        tool_results = []
+    for expected_call in expected.get("expected_tool_calls", []):
+        if not isinstance(expected_call, Mapping):
+            failures.append("invalid_expected_tool_call")
+            continue
+        matched = False
+        for result in tool_results:
+            if not isinstance(result, Mapping):
+                continue
+            output = result.get("output")
+            if isinstance(output, Mapping) and all(output.get(key) == value for key, value in expected_call.items()):
+                matched = True
+                break
+        if not matched:
+            failures.append("expected_tool_call_not_found:" + json.dumps(expected_call, sort_keys=True))
+
+    calculation = expected.get("calculation")
+    if isinstance(calculation, Mapping):
+        expected_result = calculation.get("expected_result")
+        operation = calculation.get("operation")
+        unit = calculation.get("unit")
+        outputs = [
+            result
+            for result in tool_results
+            if isinstance(result, Mapping)
+            and result.get("tool_name") == "calculate"
+            and isinstance(result.get("output"), Mapping)
+        ]
+        actual_call = next(
+            (item for item in outputs if item["output"].get("operation") == operation),
+            None,
+        )
+        if not isinstance(actual_call, Mapping):
+            failures.append(f"calculation_not_run:{operation}")
+        else:
+            actual = actual_call["output"]
+            actual_input = actual_call.get("input")
+            actual_values = actual_input.get("values") if isinstance(actual_input, Mapping) else None
+            expected_values = calculation.get("values")
+            if isinstance(expected_values, Mapping):
+                input_mismatch = not isinstance(actual_values, Mapping)
+                if isinstance(actual_values, Mapping):
+                    for key, expected_value in expected_values.items():
+                        aliases = CALCULATION_VALUE_ALIASES.get(key, (key,))
+                        actual_value = next((actual_values[name] for name in aliases if name in actual_values), None)
+                        if actual_value != expected_value:
+                            input_mismatch = True
+                            break
+                if input_mismatch:
+                    failures.append("calculation_inputs_mismatch")
+            actual_result = actual.get("result")
+            if (
+                isinstance(expected_result, (int, float))
+                and not isinstance(expected_result, bool)
+                and (
+                    not isinstance(actual_result, (int, float))
+                    or isinstance(actual_result, bool)
+                    or not math.isclose(float(actual_result), float(expected_result), rel_tol=0.0, abs_tol=1e-4)
+                )
+            ):
+                failures.append(f"calculation_result_mismatch:{actual_result}")
+            if actual.get("unit") != unit:
+                failures.append(f"calculation_unit_mismatch:{actual.get('unit')}")
+    return failures
+
+
+async def _invoke_case(case: Mapping[str, Any], request_id: str) -> Mapping[str, Any]:
+    """Run setup turns and the scored question in one in-memory conversation."""
+    setup_turns = case.get("setup_turns", [])
+    if not setup_turns:
+        result = await invoke(str(case["question"]), request_id=request_id)
+        return result if isinstance(result, Mapping) else {}
+    thread_id = f"eval-{case.get('id') or 'case'}-{request_id}"
+    if isinstance(setup_turns, list):
+        for index, turn in enumerate(setup_turns):
+            question = turn.get("question") if isinstance(turn, Mapping) else turn
+            if isinstance(question, str) and question.strip():
+                await invoke(question, thread_id=thread_id, request_id=f"{request_id}-setup-{index}")
+    result = await invoke(str(case["question"]), thread_id=thread_id, request_id=request_id)
+    return result if isinstance(result, Mapping) else {}
+
+
 def _timing(started_at: float, *, application_ms: int | None = None, judge_ms: int | None = None) -> dict[str, int]:
     timing = {"total": round((time.perf_counter() - started_at) * 1000)}
     if application_ms is not None:
@@ -228,7 +373,7 @@ def _evaluate_case(case: Mapping[str, Any], request_id: str) -> dict[str, Any]:
 
     application_started_at = time.perf_counter()
     try:
-        state = asyncio.run(invoke(question, request_id=request_id))
+        state = asyncio.run(_invoke_case(case, request_id))
     except Exception as error:
         result = _case_error(
             case,
@@ -253,15 +398,36 @@ def _evaluate_case(case: Mapping[str, Any], request_id: str) -> dict[str, Any]:
         update_current_span(output=result, level="ERROR", status_message="empty_answer")
         return result
 
-    context = state.get("context") if isinstance(state, Mapping) else None
+    contract_failures = _contract_failures(case, state)
+    if contract_failures:
+        result = _case_error(
+            case,
+            "case_contract_failed",
+            stage="contract",
+            details={"contract_failures": contract_failures, **_tool_summary(state)},
+            timing_ms=_timing(started_at, application_ms=application_ms),
+        )
+        update_current_span(output=result, level="ERROR", status_message="case_contract_failed")
+        return result
+
     judge_started_at = time.perf_counter()
     try:
         scores = asyncio.run(
             judge_answer(
-                question=question,
+                question=(
+                    "PRIOR TURNS:\n"
+                    + "\n".join(
+                        str(turn.get("question") if isinstance(turn, Mapping) else turn)
+                        for turn in case.get("setup_turns", [])
+                    )
+                    + "\n\nCURRENT QUESTION:\n"
+                    + question
+                    if isinstance(case.get("setup_turns"), list) and case.get("setup_turns")
+                    else question
+                ),
                 answer=answer.strip(),
                 reference=_reference(case),
-                context=context if isinstance(context, str) and context.strip() else None,
+                context=_evaluation_context(state),
             )
         )
     except JudgeResponseError as error:

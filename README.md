@@ -164,25 +164,9 @@ The orchestrator controls the workflow, the retriever gathers evidence, and the 
 
 ## Evaluation
 
-The golden set exercises five paths: scope guardrails, Kubernetes documentation retrieval, cloud-platform lookup, GitHub release lookup, and deterministic calculation. Each completed answer is scored from `0` to `1` for **faithfulness** to its evidence, **relevance** to the question, and **correctness** against the expected answer. CI requires every average to be at least `0.85`, with no failed cases.
+The golden set covers scope rejection and broad help, Kubernetes documentation, AWS and Azure references, Kubernetes GitHub releases/changelogs/issues, calculations, multi-step answers, prompt injection, repository boundaries, and multi-turn/source follow-ups. Each answer is scored from `0` to `1` for **faithfulness** to evidence, **relevance**, and **correctness**. Cases also declare deterministic expectations for relevance, tool selection, source types, and calculation inputs/results; contract mismatches fail the case before judging. CI requires each average to be at least `0.85`, with no failed cases.
 
-Results from the latest full run on 8 September 2026:
-
-```mermaid
-flowchart LR
-    GOLDEN["Golden set<br/>5 cases"] --> RUN["Scored<br/>5 / 5<br/>0 failures"]
-    RUN --> F["Faithfulness<br/>0.890"]
-    RUN --> R["Relevance<br/>0.980"]
-    RUN --> C["Correctness<br/>0.964"]
-    F --> GATE["Quality gate<br/>PASS<br/>all metrics >= 0.85"]
-    R --> GATE
-    C --> GATE
-
-    classDef pass fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#064e3b;
-    class GATE pass;
-```
-
-The cloud-platform case had the lowest individual score (`0.50` faithfulness). The aggregate gate passed, but per-case scores should still be reviewed for regressions hidden by averages.
+The persisted metrics below come from the earlier five-case baseline and do not represent the expanded golden set. The current expanded set has not yet been run against live model and retrieval services.
 
 Run the evaluation and enforce the same quality gate locally:
 
@@ -191,7 +175,7 @@ python -m eval.evaluate
 python scripts/check_golden_set.py --summary eval/summary.json
 ```
 
-See the [golden-set cases](eval/golden_set.jsonl), [per-case results](eval/results.jsonl), and [summary metrics](eval/summary.json).
+See the [golden-set cases](eval/golden_set.jsonl), [per-case results](eval/results.jsonl), and [summary metrics](eval/summary.json). The runner supports setup turns so follow-up and source-reuse cases execute in one conversation.
 
 ## Cost
 

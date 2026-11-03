@@ -1,5 +1,7 @@
 # Evaluation Results
 
+> Historical five-case baseline. The current expanded golden set has not been run against live model and retrieval services, so these scores do not describe the current suite.
+
 **Run date:** 2026-08-23  
 **Scope:** Five relevant Kubernetes documentation questions (`kubernetes-01` to `kubernetes-05`)  
 **Runner:** `python -m eval.evaluate --offset 5 --limit 5`
