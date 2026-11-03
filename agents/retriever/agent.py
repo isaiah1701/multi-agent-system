@@ -8,10 +8,9 @@ import logging
 from collections.abc import Mapping
 from typing import Any, TYPE_CHECKING
 
-from agents.retriever.prompts import CONTEXT_SYSTEM_PROMPT
 from agents.orchestrator.shared.conversation import prompt_with_history, recent_conversation
 from agents.orchestrator.shared.evidence import build_evidence, format_evidence_for_prompt
-from agents.orchestrator.llm.client import LLMClientError, create_message, generate_text
+from agents.orchestrator.llm.client import LLMClientError, create_message
 from agents.orchestrator.llm.config import CONTEXT_MAX_TOKENS, CONTEXT_MODEL
 from serving.app.langfuse import observe
 from tools import PLATFORM_REFERENCE_SEARCH_TOOL, TOOL_FUNCTIONS, TOOL_SCHEMAS
@@ -214,11 +213,9 @@ async def use_tools(state: "AgentState") -> dict[str, list[dict[str, Any]]]:
     return {"tool_results": tool_results}
 
 
-@observe(name="evidence-briefing", as_type="chain", capture_input=False, capture_output=False)
+@observe(name="evidence-assembly", as_type="chain", capture_input=False, capture_output=False)
 async def add_context(state: "AgentState") -> dict[str, object]:
-    """Use the low-cost model to create a grounded briefing from tool evidence."""
-    question = _question_from(state)
-    history = recent_conversation(state)
+    """Build the answer briefing directly from validated evidence, without another model call."""
     tool_results = state.get("tool_results", [])
     successful_results = [
         result
@@ -235,24 +232,6 @@ async def add_context(state: "AgentState") -> dict[str, object]:
         LOGGER.info("Tool output had no usable provenance; skipping context model")
         return {"context": "No sourced evidence was retrieved.", "sources": []}
 
-    LOGGER.info("Context generation started for %d evidence item(s)", len(evidence))
-    prompt = prompt_with_history(
-        history, f"Question:\n{question}\n\nStructured evidence:\n{format_evidence_for_prompt(evidence)}"
-    )
-
-    try:
-        context = await generate_text(
-            model=CONTEXT_MODEL,
-            system=CONTEXT_SYSTEM_PROMPT,
-            prompt=prompt,
-            max_tokens=CONTEXT_MAX_TOKENS,
-            observation_name="evidence-briefing",
-        )
-    except (LLMClientError, ValueError) as error:
-        raise RuntimeError("Context generation failed") from error
-    except Exception as error:
-        raise RuntimeError("Context generation failed") from error
-    if not isinstance(context, str) or not context.strip():
-        raise RuntimeError("Context model returned an empty or malformed response")
-    LOGGER.info("Context generation completed")
-    return {"context": context.strip(), "sources": evidence}
+    context = format_evidence_for_prompt(evidence)
+    LOGGER.info("Built deterministic evidence briefing from %d evidence item(s)", len(evidence))
+    return {"context": context, "sources": evidence}

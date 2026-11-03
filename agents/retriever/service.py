@@ -43,7 +43,6 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResponse:
             name="kubemind-retrieval-request",
             component="retrieval",
             trace_name="kubemind-request",
-            input={"question": request.question},
             tags=["retrieval", "rag"],
         ) as trace:
             tool_state = await use_tools(state)

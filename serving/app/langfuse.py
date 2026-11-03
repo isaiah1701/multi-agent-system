@@ -46,7 +46,6 @@ def request_trace(
     name: str,
     component: str,
     trace_name: str | None = None,
-    input: Any | None = None,
     session_id: str | None = None,
     tags: list[str] | None = None,
 ) -> Iterator[Any | None]:
@@ -69,7 +68,6 @@ def request_trace(
                 trace_context={"trace_id": trace_id},
                 name=name,
                 as_type="agent",
-                input=input,
                 metadata={"request_id": request_id, "component": component},
             )
         )

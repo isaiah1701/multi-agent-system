@@ -91,7 +91,7 @@ def get_async_client() -> Any:
     return _async_client
 
 
-@observe(name="anthropic-stream", as_type="generation", capture_input=False)
+@observe(name="anthropic-stream", as_type="generation", capture_input=False, capture_output=False)
 async def generate_text(
     *,
     model: str,
@@ -106,7 +106,6 @@ async def generate_text(
     update_current_generation(
         name=observation_name,
         model=model,
-        input={"system": system, "prompt": prompt},
         metadata={
             "max_tokens": str(max_tokens),
             "streaming": "true",
@@ -208,7 +207,7 @@ def _log_retry(error: Exception, retry_number: int, delay: float) -> None:
     )
 
 
-@observe(name="anthropic-tool-selection", as_type="generation", capture_output=False)
+@observe(name="anthropic-tool-selection", as_type="generation", capture_input=False, capture_output=False)
 async def create_message(
     *,
     model: str,

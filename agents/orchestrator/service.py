@@ -96,8 +96,13 @@ async def ask_stream(request: OrchestrationRequest) -> StreamingResponse:
                 await queue.put(None)
 
         task = asyncio.create_task(run())
-        while (event := await queue.get()) is not None:
-            yield event
-        await task
+        try:
+            while (event := await queue.get()) is not None:
+                yield event
+            await task
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})

@@ -7,6 +7,7 @@ import logging
 import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from threading import RLock
 from typing import Any, Protocol, Sequence
 
 from ingestion.chunk import ChunkingConfig, SentenceTransformerEmbedder
@@ -150,6 +151,17 @@ def bm25_search(
         ) from error
 
     index = BM25Okapi([tokenize(record.text) for record in records])
+    return _rank_bm25(query, records, index, limit)
+
+
+def _rank_bm25(
+    query: str,
+    records: Sequence[RetrievalCandidate],
+    index: Any,
+    limit: int,
+) -> list[RetrievalCandidate]:
+    if not records or limit < 1:
+        return []
     scores = index.get_scores(tokenize(query))
     ordered = sorted(range(len(records)), key=lambda index: float(scores[index]), reverse=True)
     return [replace(records[index], bm25_score=float(scores[index])) for index in ordered[:limit]]
@@ -201,6 +213,10 @@ class HybridRetriever:
         self._collection = collection
         self._embedder = embedder
         self._reranker = reranker
+        self._bm25_lock = RLock()
+        self._bm25_records: list[RetrievalCandidate] | None = None
+        self._bm25_index: Any | None = None
+        self._bm25_collection_count: int | None = None
 
     def _get_collection(self) -> ChromaCollection:
         if self._collection is None:
@@ -240,6 +256,25 @@ class HybridRetriever:
             for chunk_id, document, metadata in zip(ids, documents, metadatas, strict=True)
         ]
 
+    def _get_bm25_index(self, collection_count: int) -> tuple[list[RetrievalCandidate], Any | None]:
+        """Build the lexical index once per collection version, not once per query."""
+        with self._bm25_lock:
+            if self._bm25_index is not None and self._bm25_collection_count == collection_count:
+                return self._bm25_records or [], self._bm25_index
+            try:
+                from rank_bm25 import BM25Okapi
+            except ImportError as error:  # pragma: no cover - environment dependent
+                raise RuntimeError(
+                    "rank-bm25 is required for keyword retrieval. "
+                    "Install dependencies with: python3 -m pip install -r requirements.txt"
+                ) from error
+            records = self._all_records()
+            index = BM25Okapi([tokenize(record.text) for record in records]) if records else None
+            self._bm25_records = records
+            self._bm25_index = index
+            self._bm25_collection_count = collection_count
+            return records, index
+
     def ann_search(self, query: str, limit: int) -> list[RetrievalCandidate]:
         """Run ANN search using the exact embedding settings used for ingestion."""
         collection = self._get_collection()
@@ -270,11 +305,17 @@ class HybridRetriever:
         if k < 1:
             raise ValueError("k must be at least 1")
         collection = self._get_collection()
-        if collection.count() == 0:
+        collection_count = collection.count()
+        if collection_count == 0:
             LOGGER.info("Chroma collection %r is empty; no results returned", self.config.collection_name)
             return []
         ann_candidates = self.ann_search(query, self.config.ann_candidates)
-        bm25_candidates = bm25_search(query, self._all_records(), self.config.bm25_candidates)
+        records, bm25_index = self._get_bm25_index(collection_count)
+        bm25_candidates = (
+            _rank_bm25(query, records, bm25_index, self.config.bm25_candidates)
+            if bm25_index is not None
+            else []
+        )
         fused = reciprocal_rank_fusion(
             ann_candidates, bm25_candidates,
             constant=self.config.rrf_constant, limit=self.config.hybrid_candidate_limit,

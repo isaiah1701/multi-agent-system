@@ -388,7 +388,7 @@ def _evaluate_case(case: Mapping[str, Any], request_id: str) -> dict[str, Any]:
         result = _case_error(case, "missing_question", stage="input", timing_ms=_timing(started_at))
         update_current_span(output=result, level="ERROR", status_message="missing_question")
         return result
-    update_current_span(input={"id": case.get("id"), "category": case.get("category"), "question": question})
+    update_current_span(metadata={"case_id": case.get("id"), "category": case.get("category")})
 
     application_started_at = time.perf_counter()
     try:
@@ -518,7 +518,6 @@ def evaluate_case(case: Mapping[str, Any]) -> dict[str, Any]:
         request_id,
         name="golden-set-evaluation-case",
         component="eval",
-        input={"case_id": case_id, "question": case.get("question")},
         tags=["eval", "llm-as-judge", str(case.get("category") or "uncategorized")],
     ) as trace:
         result = _evaluate_case(case, request_id)

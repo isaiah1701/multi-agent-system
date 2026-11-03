@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import ipaddress
 import json
 import logging
 import os
 from pathlib import Path
+import time
 from typing import Any
 from uuid import uuid4
 
 import httpx
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -32,6 +35,10 @@ STREAM_PROGRESS_UPDATES = (
     (12.0, "Reviewing evidence and preparing the answer..."),
     (25.0, "Still working on this detailed answer..."),
 )
+ASK_RATE_LIMIT = 60
+ASK_RATE_BURST = 12
+ASK_RATE_WINDOW_SECONDS = 60.0
+_RATE_BUCKETS: dict[str, tuple[float, float]] = {}
 
 
 class AskRequest(BaseModel):
@@ -102,6 +109,61 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
 
 
+def _client_address(request: Request) -> str:
+    """Read the ALB-appended client address, falling back to the direct peer."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    candidate = forwarded.rsplit(",", 1)[-1].strip() if forwarded else ""
+    for value in (candidate, request.client.host if request.client is not None else ""):
+        if value.startswith("[") and "]" in value:
+            value = value[1 : value.index("]")]
+        elif value.count(":") == 1 and value.rsplit(":", 1)[1].isdigit():
+            value = value.rsplit(":", 1)[0]
+        try:
+            return str(ipaddress.ip_address(value))
+        except ValueError:
+            continue
+    return "unknown"
+
+
+def _client_session_id(request: Request, thread_id: str | None) -> str | None:
+    """Scope browser-provided thread IDs to the requesting network client."""
+    if not thread_id:
+        return None
+    value = f"{_client_address(request)}\0{thread_id}".encode("utf-8")
+    return hashlib.sha256(value).hexdigest()
+
+
+def _allow_ask_request(address: str, now: float) -> bool:
+    """Apply a bounded per-process token bucket to expensive public requests."""
+    refill_per_second = ASK_RATE_LIMIT / ASK_RATE_WINDOW_SECONDS
+    tokens, last_updated = _RATE_BUCKETS.get(address, (float(ASK_RATE_BURST), now))
+    tokens = min(float(ASK_RATE_BURST), tokens + max(0.0, now - last_updated) * refill_per_second)
+    allowed = tokens >= 1.0
+    _RATE_BUCKETS.pop(address, None)
+    _RATE_BUCKETS[address] = (tokens - 1.0 if allowed else tokens, now)
+    if len(_RATE_BUCKETS) > 4_096:
+        stale_before = now - ASK_RATE_WINDOW_SECONDS * 2
+        for key, (_, updated) in tuple(_RATE_BUCKETS.items()):
+            if updated < stale_before:
+                _RATE_BUCKETS.pop(key, None)
+        while len(_RATE_BUCKETS) > 4_096:
+            _RATE_BUCKETS.pop(next(iter(_RATE_BUCKETS)))
+    return allowed
+
+
+@app.middleware("http")
+async def limit_public_questions(request: Request, call_next: Any) -> Response:
+    if request.method == "POST" and request.url.path in {"/ask", "/ask/stream"}:
+        if not _allow_ask_request(_client_address(request), time.monotonic()):
+            return Response(
+                content=json.dumps({"detail": "Too many questions. Please wait and try again."}),
+                status_code=429,
+                media_type="application/json",
+                headers={"Retry-After": "1"},
+            )
+    return await call_next(request)
+
+
 def _timeout() -> httpx.Timeout:
     try:
         seconds = float(os.getenv(AGENT_SERVICE_TIMEOUT_ENV, "120"))
@@ -123,7 +185,6 @@ async def invoke(question: str, *, thread_id: str | None = None, request_id: str
         name="kubemind-api-request",
         component="api",
         trace_name="kubemind-request",
-        input={"question": question},
         session_id=thread_id,
         tags=["agents", "api"],
     ) as trace:
@@ -162,7 +223,6 @@ async def invoke_stream(question: str, *, thread_id: str | None, request_id: str
         name="kubemind-api-request",
         component="api",
         trace_name="kubemind-request",
-        input={"question": question},
         session_id=thread_id,
         tags=["agents", "api", "sse"],
     ) as trace:
@@ -224,11 +284,15 @@ async def health() -> HealthResponse:
 
 
 @app.post("/ask", response_model=AskResponse)
-async def ask(request: AskRequest, response: Response) -> AskResponse:
+async def ask(request: AskRequest, response: Response, http_request: Request) -> AskResponse:
     """Validate a browser question and delegate AI work to the private orchestrator."""
     request_id = uuid4().hex
     try:
-        result = await invoke(request.question, thread_id=request.thread_id, request_id=request_id)
+        result = await invoke(
+            request.question,
+            thread_id=_client_session_id(http_request, request.thread_id),
+            request_id=request_id,
+        )
     except Exception:
         LOGGER.exception("Orchestrator failed while serving a browser question")
         raise HTTPException(status_code=500, detail=SAFE_ERROR_MESSAGE) from None
@@ -268,7 +332,7 @@ def _sse(event: str, payload: dict[str, Any]) -> str:
 
 
 @app.post("/ask/stream")
-async def ask_stream(request: AskRequest) -> StreamingResponse:
+async def ask_stream(request: AskRequest, http_request: Request) -> StreamingResponse:
     """Stream guarded answer deltas from the private orchestration pipeline."""
 
     request_id = uuid4().hex
@@ -278,9 +342,12 @@ async def ask_stream(request: AskRequest) -> StreamingResponse:
         # while the grounded answer is being assembled.
         yield _sse("status", {"message": "Checking scope and gathering evidence..."})
         next_event: asyncio.Task[Any] | None = None
+        stream: Any | None = None
         try:
             stream = invoke_stream(
-                request.question, thread_id=request.thread_id, request_id=request_id
+                request.question,
+                thread_id=_client_session_id(http_request, request.thread_id),
+                request_id=request_id,
             ).__aiter__()
             started_at = asyncio.get_running_loop().time()
             progress_index = 0
@@ -321,6 +388,8 @@ async def ask_stream(request: AskRequest) -> StreamingResponse:
                     await next_event
                 except asyncio.CancelledError:
                     pass
+            if stream is not None:
+                await stream.aclose()
 
     return StreamingResponse(
         events(),
