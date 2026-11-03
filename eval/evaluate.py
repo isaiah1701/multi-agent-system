@@ -11,6 +11,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from agents.orchestrator.orchestrator import invoke
@@ -261,6 +262,16 @@ def _contract_failures(case: Mapping[str, Any], state: Mapping[str, Any]) -> lis
     for source_type in expected.get("required_source_types", []):
         if source_type not in source_types:
             failures.append(f"missing_required_source_type:{source_type}")
+    for forbidden_domain in expected.get("forbidden_source_domains", []):
+        for source in sources if isinstance(sources, list) else []:
+            if not isinstance(source, Mapping) or not isinstance(source.get("url"), str):
+                continue
+            hostname = urlsplit(source["url"]).hostname or ""
+            if hostname.casefold() == str(forbidden_domain).casefold() or hostname.casefold().endswith(
+                "." + str(forbidden_domain).casefold()
+            ):
+                failures.append(f"forbidden_source_domain:{forbidden_domain}")
+                break
 
     tool_results = state.get("tool_results")
     if not isinstance(tool_results, list):
@@ -309,6 +320,14 @@ def _contract_failures(case: Mapping[str, Any], state: Mapping[str, Any]) -> lis
                     for key, expected_value in expected_values.items():
                         aliases = CALCULATION_VALUE_ALIASES.get(key, (key,))
                         actual_value = next((actual_values[name] for name in aliases if name in actual_values), None)
+                        if (
+                            key == "successful"
+                            and actual_value is None
+                            and isinstance(actual_values.get("requests", actual_values.get("total")), (int, float))
+                        ):
+                            failed = actual_values.get("failures", actual_values.get("errors"))
+                            if isinstance(failed, (int, float)):
+                                actual_value = actual_values.get("requests", actual_values.get("total")) - failed
                         if actual_value != expected_value:
                             input_mismatch = True
                             break

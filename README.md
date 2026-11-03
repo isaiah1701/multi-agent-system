@@ -164,7 +164,7 @@ The orchestrator controls the workflow, the retriever gathers evidence, and the 
 
 ## Evaluation
 
-The golden set covers scope rejection and broad help, Kubernetes documentation, AWS and Azure references, Kubernetes GitHub releases/changelogs/issues, calculations, multi-step answers, prompt injection, repository boundaries, and multi-turn/source follow-ups. Each answer is scored from `0` to `1` for **faithfulness** to evidence, **relevance**, and **correctness**. Cases also declare deterministic expectations for relevance, tool selection, source types, and calculation inputs/results; contract mismatches fail the case before judging. CI requires each average to be at least `0.85`, with no failed cases.
+The 50-case golden set covers scope rejection and broad help, Kubernetes documentation, AWS/Azure/Google Cloud references, Kubernetes GitHub releases/changelogs/issues/pull requests/tags, calculations, multi-step answers, prompt injection, tool boundaries, capability limits, and multi-turn/source follow-ups. Each answer is scored from `0` to `1` for **faithfulness** to evidence, **relevance**, and **correctness**. Cases also declare deterministic expectations for relevance, tool selection, source types, and calculation inputs/results; contract mismatches fail the case before judging. CI requires each average to be at least `0.85`, with no failed cases.
 
 The persisted metrics below come from the earlier five-case baseline and do not represent the expanded golden set. The current expanded set has not yet been run against live model and retrieval services.
 
